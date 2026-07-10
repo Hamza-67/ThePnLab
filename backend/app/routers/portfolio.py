@@ -12,11 +12,37 @@ from app.services.market_data import (
     check_market_open as _check_market_open,
     invalidate_price as _invalidate_price,
 )
+from app.services import margin as mg
+from app.services.liquidation import check_liquidations
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
+
+
+def _position_value(p: Position, px: float) -> float:
+    """Valeur d'une position : q·p en spot, équité (marge + uPnL) en dérivés."""
+    if p.instrument_type in ("CFD", "FUTURES"):
+        upnl = mg.unrealized_pnl(
+            p.direction, float(p.quantity), float(p.avg_price or 0), px,
+            float(p.contract_size or 1.0),
+        )
+        return mg.position_equity(float(p.margin or 0.0), upnl)
+    return px * float(p.quantity)
+
+
+def _snapshot_equity(db, pf: Portfolio):
+    positions = db.query(Position).filter(
+        Position.portfolio_id == pf.id, Position.quantity > 0
+    ).all()
+    pos_val = sum(_position_value(p, _last_price(p.ticker)) for p in positions)
+    db.add(EquitySnapshot(
+        portfolio_id=pf.id,
+        equity=float(pf.cash) + pos_val,
+        cash=float(pf.cash),
+    ))
 
 
 def _get_portfolio(db, user_id: int, name: str) -> Portfolio:
@@ -36,6 +62,13 @@ def summary(
     user: User = Depends(get_current_user),
 ):
     pf = _get_portfolio(db, user.id, portfolio)
+
+    # Vérifie les liquidations de CE portfolio avant d'afficher (positions levier)
+    try:
+        check_liquidations(db, portfolio_id=pf.id)
+    except Exception as e:
+        logger.warning(f"check_liquidations in summary failed: {e}")
+
     positions = db.query(Position).filter(
         Position.portfolio_id == pf.id,
         Position.quantity > 0
@@ -44,21 +77,45 @@ def summary(
     pos_list  = []
     pos_value = 0.0
     for p in positions:
-        px       = _last_price(p.ticker)
-        val      = px * float(p.quantity)
-        avg      = float(p.avg_price) if p.avg_price else 0
-        pnl      = (px - avg) * float(p.quantity)
-        pnl_pct  = ((px - avg) / avg * 100) if avg > 0 else 0.0
+        px  = _last_price(p.ticker)
+        avg = float(p.avg_price) if p.avg_price else 0
+        row = {
+            "position_id":     p.id,
+            "ticker":          p.ticker,
+            "quantity":        round(float(p.quantity), 6),
+            "avg_price":       round(avg, 4),
+            "last_price":      round(px, 4),
+            "instrument_type": p.instrument_type,
+            "direction":       p.direction,
+            "leverage":        float(p.leverage or 1.0),
+        }
+
+        if p.instrument_type in ("CFD", "FUTURES"):
+            # Valeur de la position = équité E = marge + uPnL (pas q·p !)
+            m_contract = float(p.contract_size or 1.0)
+            upnl   = mg.unrealized_pnl(p.direction, float(p.quantity), avg, px, m_contract)
+            margin = float(p.margin or 0.0)
+            val    = mg.position_equity(margin, upnl)
+            row.update({
+                "value":             round(val, 2),
+                "pnl":               round(upnl, 2),
+                "pnl_pct":           round(upnl / margin * 100, 2) if margin > 0 else 0.0,
+                "margin":            round(margin, 2),
+                "liquidation_price": round(float(p.liquidation_price), 4) if p.liquidation_price else None,
+                "expiry_date":       p.expiry_date.isoformat() if p.expiry_date else None,
+            })
+        else:
+            val     = px * float(p.quantity)
+            pnl     = (px - avg) * float(p.quantity)
+            pnl_pct = ((px - avg) / avg * 100) if avg > 0 else 0.0
+            row.update({
+                "value":   round(val, 2),
+                "pnl":     round(pnl, 2),
+                "pnl_pct": round(pnl_pct, 2),
+            })
+
         pos_value += val
-        pos_list.append({
-            "ticker":     p.ticker,
-            "quantity":   round(float(p.quantity), 6),
-            "avg_price":  round(avg, 4),
-            "last_price": round(px, 4),
-            "value":      round(val, 2),
-            "pnl":        round(pnl, 2),
-            "pnl_pct":    round(pnl_pct, 2),
-        })
+        pos_list.append(row)
 
     # Trier par valeur décroissante
     pos_list.sort(key=lambda x: x["value"], reverse=True)
@@ -80,10 +137,182 @@ def summary(
 
 class OrderBody(BaseModel):
     ticker: str
-    side: str       # BUY ou SELL
+    side: str       # BUY (ouvrir) ou SELL (fermer)
     mode: str       # "qty" ou "amount"
-    value: float    # nombre d'actions OU montant en $
+    value: float    # nombre d'unités OU montant en $ (dérivés : marge investie)
     portfolio: str = "USER"
+    # ── Dérivés (v2) — défauts = comportement spot inchangé ──────────────────
+    instrument_type: str = "SPOT"          # SPOT | CFD | FUTURES
+    direction: str = "LONG"                # LONG | SHORT (dérivés uniquement)
+    leverage: float = 1.0                  # CFD : x2-x20 actions, x2-x5 crypto
+    contract_size: float = 1.0             # futures : multiplicateur
+    expiry: Optional[str] = None           # futures : ISO date, défaut = prochain trimestre
+    position_id: Optional[int] = None      # fermeture ciblée d'une position dérivée
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DÉRIVÉS — ouverture / fermeture (CFD + Futures)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _open_derivative(db, pf: Portfolio, body: OrderBody, px: float) -> dict:
+    """Ouvre une position CFD ou Futures : bloque la marge, fixe le prix de liq."""
+    if body.direction not in ("LONG", "SHORT"):
+        raise HTTPException(status_code=400, detail="Direction invalide (LONG ou SHORT)")
+
+    slip = SLIPPAGE_BPS / 10000
+    # Ouvrir un LONG = acheter (ask), ouvrir un SHORT = vendre (bid)
+    exec_price = px * (1 + slip) if body.direction == "LONG" else px * (1 - slip)
+
+    if body.instrument_type == "CFD":
+        leverage = float(body.leverage)
+        ok, msg = mg.validate_leverage(body.ticker, leverage)
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+        contract_size  = 1.0
+        expiry_date    = None
+        financing_rate = mg.CFD_FINANCING_RATE
+    else:  # FUTURES — levier implicite par la marge 10%
+        leverage       = round(1 / mg.FUTURES_MARGIN_RATIO, 2)
+        contract_size  = max(1.0, float(body.contract_size))
+        financing_rate = 0.0
+        if body.expiry:
+            try:
+                expiry_date = datetime.fromisoformat(body.expiry)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Format d'échéance invalide (ISO attendu)")
+        else:
+            expiry_date = mg.next_quarterly_expiry()
+
+    # mode "amount" = marge investie → quantité déduite du notionnel N = marge · L
+    if body.mode == "amount":
+        if body.value < 10:
+            raise HTTPException(status_code=400, detail="Marge minimum : $10")
+        qty = (body.value * leverage) / (exec_price * contract_size)
+    else:
+        qty = float(body.value)
+        if qty <= 0:
+            raise HTTPException(status_code=400, detail="Quantité invalide")
+
+    n = mg.notional(qty, exec_price, contract_size)
+    margin = (mg.initial_margin_cfd(n, leverage) if body.instrument_type == "CFD"
+              else mg.initial_margin_futures(n))
+    fee = n * FEE_RATE
+
+    if pf.cash < margin + fee:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cash insuffisant — marge requise : ${margin:.2f} + frais ${fee:.2f}, disponible : ${pf.cash:.2f}"
+        )
+
+    liq = mg.liquidation_price(body.direction, exec_price, leverage)
+
+    pos = Position(
+        portfolio_id=pf.id,
+        ticker=body.ticker,
+        quantity=qty,
+        avg_price=exec_price,
+        instrument_type=body.instrument_type,
+        direction=body.direction,
+        leverage=leverage,
+        margin=margin,
+        liquidation_price=liq,
+        contract_size=contract_size,
+        expiry_date=expiry_date,
+        financing_rate=financing_rate,
+        last_mark_price=exec_price if body.instrument_type == "FUTURES" else None,
+    )
+    db.add(pos)
+    pf.cash = float(pf.cash) - margin - fee
+
+    db.add(Trade(
+        portfolio_id=pf.id,
+        ticker=body.ticker,
+        side="BUY",
+        price=round(exec_price, 4),
+        quantity=round(qty, 6),
+        profit=0.0,
+        actor="USER",
+        rationale=f"Ouverture {body.instrument_type} {body.direction} x{leverage:.0f} (marge ${margin:.2f})",
+        instrument_type=body.instrument_type,
+        direction=body.direction,
+        leverage=leverage,
+    ))
+
+    return {
+        "ok": True,
+        "message": (
+            f"{body.instrument_type} {body.direction} x{leverage:.0f} ouvert : "
+            f"{round(qty, 6)} × {body.ticker} @ ${exec_price:.2f} — "
+            f"marge ${margin:.2f}, liquidation à ${liq:.2f}"
+        ),
+        "margin": round(margin, 2),
+        "liquidation_price": round(liq, 4),
+    }
+
+
+def _close_derivative(db, pf: Portfolio, body: OrderBody, px: float) -> dict:
+    """Ferme (totalement ou partiellement) une position CFD/Futures."""
+    q = db.query(Position).filter(
+        Position.portfolio_id == pf.id,
+        Position.quantity > 0,
+        Position.instrument_type == body.instrument_type,
+    )
+    if body.position_id:
+        pos = q.filter(Position.id == body.position_id).first()
+    else:
+        pos = q.filter(
+            Position.ticker == body.ticker,
+            Position.direction == body.direction,
+        ).order_by(Position.id.asc()).first()
+    if not pos:
+        raise HTTPException(status_code=400, detail=f"Aucune position {body.instrument_type} ouverte sur {body.ticker}")
+
+    slip = SLIPPAGE_BPS / 10000
+    # Fermer un LONG = vendre (bid), fermer un SHORT = racheter (ask)
+    exec_price = px * (1 - slip) if pos.direction == "LONG" else px * (1 + slip)
+
+    total_qty = float(pos.quantity)
+    if body.mode == "qty" and 0 < float(body.value) < total_qty:
+        qty_close = float(body.value)
+    else:
+        qty_close = total_qty   # défaut : fermeture totale
+
+    m_contract = float(pos.contract_size or 1.0)
+    fraction   = qty_close / total_qty
+    margin_out = float(pos.margin) * fraction
+    upnl       = mg.unrealized_pnl(pos.direction, qty_close, float(pos.avg_price), exec_price, m_contract)
+    fee        = mg.notional(qty_close, exec_price, m_contract) * FEE_RATE
+    profit     = upnl - fee
+
+    pf.cash = float(pf.cash) + margin_out + upnl - fee
+    pos.quantity = total_qty - qty_close
+    pos.margin   = float(pos.margin) - margin_out
+    if pos.quantity < 1e-9:
+        pos.quantity = 0.0
+        pos.margin   = 0.0
+
+    db.add(Trade(
+        portfolio_id=pf.id,
+        ticker=pos.ticker,
+        side="SELL",
+        price=round(exec_price, 4),
+        quantity=round(qty_close, 6),
+        profit=round(profit, 2),
+        actor="USER",
+        rationale=f"Fermeture {pos.instrument_type} {pos.direction} x{float(pos.leverage):.0f} — PnL ${profit:.2f}",
+        instrument_type=pos.instrument_type,
+        direction=pos.direction,
+        leverage=float(pos.leverage),
+    ))
+
+    return {
+        "ok": True,
+        "message": (
+            f"{pos.instrument_type} {pos.direction} fermé : {round(qty_close, 6)} × {pos.ticker} "
+            f"@ ${exec_price:.2f} — PnL ${profit:.2f}"
+        ),
+        "pnl": round(profit, 2),
+    }
 
 
 @router.post("/order")
@@ -105,6 +334,22 @@ def place_order(
     # Invalide le cache pour ce ticker après un ordre
     # → le prochain appel à summary récupère un prix frais
     _invalidate_price(body.ticker)
+
+    # ── Branche dérivés (CFD / Futures) ───────────────────────────────────────
+    if body.instrument_type in ("CFD", "FUTURES"):
+        if body.portfolio != "USER":
+            # Le bot IA reste spot-only — ses calculs de perf supposent du spot
+            raise HTTPException(status_code=400, detail="Les dérivés ne sont disponibles que sur le portfolio USER")
+        if body.side == "BUY":
+            result = _open_derivative(db, pf, body, px)
+        else:
+            result = _close_derivative(db, pf, body, px)
+        _snapshot_equity(db, pf)
+        db.commit()
+        return result
+
+    if body.instrument_type != "SPOT":
+        raise HTTPException(status_code=400, detail="Type d'instrument invalide (SPOT, CFD ou FUTURES)")
 
     if body.mode == "amount":
         if body.value <= 0:
@@ -133,7 +378,8 @@ def place_order(
 
         pos = db.query(Position).filter(
             Position.portfolio_id == pf.id,
-            Position.ticker == body.ticker
+            Position.ticker == body.ticker,
+            Position.instrument_type == "SPOT",
         ).first()
 
         if pos:
@@ -154,7 +400,8 @@ def place_order(
     else:  # SELL
         pos = db.query(Position).filter(
             Position.portfolio_id == pf.id,
-            Position.ticker == body.ticker
+            Position.ticker == body.ticker,
+            Position.instrument_type == "SPOT",
         ).first()
         if not pos or pos.quantity < qty:
             raise HTTPException(
@@ -176,17 +423,7 @@ def place_order(
         rationale=f"Ordre manuel ({body.mode}={body.value})",
     ))
 
-    # Snapshot equity — utilise exec_price pour cohérence immédiate
-    positions_all = db.query(Position).filter(
-        Position.portfolio_id == pf.id, Position.quantity > 0
-    ).all()
-    pos_val = sum(_last_price(p.ticker) * p.quantity for p in positions_all)
-    db.add(EquitySnapshot(
-        portfolio_id=pf.id,
-        equity=float(pf.cash) + pos_val,
-        cash=float(pf.cash),
-    ))
-
+    _snapshot_equity(db, pf)
     db.commit()
     return {
         "ok": True,
@@ -250,7 +487,7 @@ def get_equity(
             Position.portfolio_id == pf.id,
             Position.quantity > 0
         ).all()
-        live_pos_val = sum(_last_price(p.ticker) * float(p.quantity) for p in positions)
+        live_pos_val = sum(_position_value(p, _last_price(p.ticker)) for p in positions)
         live_equity  = round(float(pf.cash) + live_pos_val, 2)
     except Exception:
         live_equity = round(float(pf.cash), 2)
@@ -403,7 +640,7 @@ def leaderboard(db: Session = Depends(get_db)):
             continue
         positions = pos_by_pf.get(pf.id, [])
         # _last_price utilise un cache 60s — 1 seul appel réseau par ticker unique
-        pos_val = sum(_last_price(p.ticker) * float(p.quantity) for p in positions)
+        pos_val = sum(_position_value(p, _last_price(p.ticker)) for p in positions)
         equity  = float(pf.cash) + pos_val
         pnl     = equity - STARTING_CASH
         pnl_pct = (pnl / STARTING_CASH * 100) if STARTING_CASH > 0 else 0.0
