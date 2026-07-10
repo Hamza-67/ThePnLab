@@ -7,200 +7,16 @@ from app.auth import get_current_user
 from app.models.user import User
 from app.models.portfolio import Portfolio, Position, Trade, EquitySnapshot
 from app.config import STARTING_CASH, FEE_RATE, SLIPPAGE_BPS
-import yfinance as yf
-import pandas as pd
+from app.services.market_data import (
+    last_price as _last_price,
+    check_market_open as _check_market_open,
+    invalidate_price as _invalidate_price,
+)
 from datetime import datetime, timezone, timedelta
-import pytz
-import urllib.request
-import json as _json
-import threading as _threading
-import time as _time
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
-
-# ── Crypto & commodités : 24/7 ──────────────────────────────────────────────
-CRYPTO_TICKERS = {
-    "BTC-USD","ETH-USD","SOL-USD","BNB-USD","ADA-USD",
-    "XRP-USD","DOGE-USD","AVAX-USD","DOT-USD","LINK-USD",
-}
-COMMODITY_TICKERS = {"GC=F","SI=F","HG=F","PL=F","CL=F","NG=F","DX=F"}
-
-# ── CoinGecko — source fiable pour les prix crypto dans le portfolio ──────────
-# Évite les bugs cross-ticker yfinance (ex: SOL → prix de BTC $73,925 → faux +78000%)
-_CG_IDS: dict[str, str] = {
-    "BTC-USD":  "bitcoin",
-    "ETH-USD":  "ethereum",
-    "SOL-USD":  "solana",
-    "BNB-USD":  "binancecoin",
-    "XRP-USD":  "ripple",
-    "DOGE-USD": "dogecoin",
-    "ADA-USD":  "cardano",
-    "AVAX-USD": "avalanche-2",
-    "DOT-USD":  "polkadot",
-    "LINK-USD": "chainlink",
-}
-_CG_PRICE_CACHE: dict[str, tuple[float, float]] = {}  # ticker → (price, expires_at)
-_CG_CACHE_LOCK = _threading.Lock()
-_CG_CACHE_TTL  = 30  # secondes
-
-
-def _fetch_coingecko_portfolio(tickers: list[str]) -> dict[str, float]:
-    """
-    Récupère les prix CoinGecko pour les tickers crypto du portfolio.
-    Retourne {ticker: price}. Silencieux en cas d'échec (fallback yfinance).
-    """
-    now = _time.time()
-    result: dict[str, float] = {}
-    need: dict[str, str] = {}
-
-    # Check cache
-    with _CG_CACHE_LOCK:
-        for t in tickers:
-            if t in _CG_IDS:
-                entry = _CG_PRICE_CACHE.get(t)
-                if entry and now < entry[1]:
-                    result[t] = entry[0]
-                else:
-                    need[t] = _CG_IDS[t]
-
-    if not need:
-        return result
-
-    ids_str = ",".join(need.values())
-    url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids_str}&vs_currencies=usd"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "ThePnLab/1.0"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = _json.loads(resp.read())
-        expires = now + _CG_CACHE_TTL
-        with _CG_CACHE_LOCK:
-            for ticker, cg_id in need.items():
-                price = data.get(cg_id, {}).get("usd")
-                if price and float(price) > 0:
-                    result[ticker] = float(price)
-                    _CG_PRICE_CACHE[ticker] = (float(price), expires)
-        return result
-    except Exception as exc:
-        logger.warning(f"[CoinGecko portfolio] {exc}")
-        return result
-
-# ── Horaires par exchange ────────────────────────────────────────────────────
-MARKET_HOURS = {
-    "US": {"tz": "America/New_York", "open": (9, 30),  "close": (16, 0)},
-    "EU": {"tz": "Europe/Paris",     "open": (9, 0),   "close": (17, 30)},
-    # ETF européens cotés sur Euronext Amsterdam / Xetra
-    "EU_ETF": {"tz": "Europe/Paris", "open": (9, 0),   "close": (17, 30)},
-}
-
-def _get_market_rule(ticker: str) -> str | None:
-    """
-    Détermine le marché d'un ticker.
-    None = 24/7 (crypto, commodités).
-    "US" = NYSE / NASDAQ / AMEX.
-    "EU" = Euronext Paris / Amsterdam / Xetra.
-    """
-    if ticker in CRYPTO_TICKERS:
-        return None   # 24/7
-    if ticker in COMMODITY_TICKERS:
-        return None   # marchés à terme : quasi-24/7
-    if ticker.endswith(".PA"):  # Euronext Paris
-        return "EU"
-    if ticker.endswith(".AS"):  # Euronext Amsterdam
-        return "EU"
-    if ticker.endswith(".DE"):  # Xetra
-        return "EU"
-    # ETF américains (AMEX/NASDAQ/NYSE)
-    return "US"
-
-# Cache simple en mémoire pour éviter les appels yfinance multiples
-# dans le même request (summary appelle _last_price pour chaque position)
-_price_cache: dict[str, tuple[float, datetime]] = {}
-_CACHE_TTL_SECONDS = 60  # Prix valable 60s
-
-
-def _check_market_open(ticker: str) -> tuple[bool, str]:
-    """
-    Vérifie si le marché du ticker est ouvert.
-    - Crypto & commodités : toujours ouvert (24/7).
-    - Actions US (NYSE/NASDAQ/AMEX) : lun-ven 9h30-16h ET.
-    - Actions EU (.PA / .AS / .DE) : lun-ven 9h00-17h30 CET.
-    - ETF US (SPY, QQQ, etc.) : même horaire que NYSE.
-    """
-    rule = _get_market_rule(ticker)
-    if rule is None:
-        return True, "24/7"
-    h   = MARKET_HOURS[rule]
-    tz  = pytz.timezone(h["tz"])
-    now = datetime.now(tz)
-    if now.weekday() >= 5:
-        day = "samedi" if now.weekday() == 5 else "dimanche"
-        return False, f"Marché fermé ({day}) — rouvre lundi à {h['open'][0]:02d}h{h['open'][1]:02d} ({h['tz']})"
-    oh, om = h["open"]
-    ch, cm = h["close"]
-    open_t  = now.replace(hour=oh, minute=om, second=0, microsecond=0)
-    close_t = now.replace(hour=ch, minute=cm, second=0, microsecond=0)
-    if open_t <= now <= close_t:
-        return True, f"Ouvert ({now.strftime('%H:%M')} {h['tz']})"
-    if now < open_t:
-        return False, f"Marché fermé — ouvre à {oh:02d}h{om:02d} ({h['tz']})"
-    return False, f"Marché fermé — a clôturé à {ch:02d}h{cm:02d} ({h['tz']})"
-
-
-def _last_price(ticker: str) -> float:
-    """
-    Prix temps-réel.
-    - Crypto : CoinGecko en priorité (source fiable, pas de cross-ticker bug)
-    - Autres  : yfinance fast_info + fallback download
-    Cache 60s pour éviter les appels répétés dans un même request.
-    """
-    global _price_cache
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-
-    # Vérifie le cache
-    if ticker in _price_cache:
-        cached_price, cached_time = _price_cache[ticker]
-        age = (now - cached_time).total_seconds()
-        if age < _CACHE_TTL_SECONDS and cached_price > 0:
-            return cached_price
-
-    # 1. CoinGecko pour les tickers crypto (anti-corruption prix yfinance)
-    if ticker in _CG_IDS:
-        cg = _fetch_coingecko_portfolio([ticker])
-        price = cg.get(ticker, 0.0)
-        if price > 0:
-            _price_cache[ticker] = (price, now)
-            return price
-        # Si CoinGecko échoue → fallback yfinance ci-dessous
-
-    # 2. yfinance fast_info (actions, ETFs, commodités)
-    try:
-        p = yf.Ticker(ticker).fast_info.last_price
-        if p is not None and float(p) > 0:
-            price = float(p)
-            _price_cache[ticker] = (price, now)
-            return price
-    except Exception:
-        pass
-
-    # 3. Fallback : clôture journalière SANS auto_adjust (évite distorsions leveraged ETFs)
-    try:
-        df = yf.download(
-            ticker, period="5d", interval="1d",
-            progress=False, auto_adjust=False, timeout=8,
-        )
-        if df is None or df.empty:
-            return 0.0
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        price = float(df["Close"].dropna().iloc[-1])
-        if price > 0:
-            _price_cache[ticker] = (price, now)
-            return price
-        return 0.0
-    except Exception:
-        return 0.0
 
 
 def _get_portfolio(db, user_id: int, name: str) -> Portfolio:
@@ -288,8 +104,7 @@ def place_order(
 
     # Invalide le cache pour ce ticker après un ordre
     # → le prochain appel à summary récupère un prix frais
-    if body.ticker in _price_cache:
-        del _price_cache[body.ticker]
+    _invalidate_price(body.ticker)
 
     if body.mode == "amount":
         if body.value <= 0:

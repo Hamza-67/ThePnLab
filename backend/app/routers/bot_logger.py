@@ -11,6 +11,8 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, date, timedelta
 from typing import Optional
 
+from app.services.timeutils import utcnow
+
 logger = logging.getLogger(__name__)
 LOGS_DIR = os.getenv("BOT_LOGS_DIR", "data/bot_cycles")
 
@@ -229,7 +231,7 @@ def load_cycles_paginated(page: int = 0, per_page: int = 10) -> dict:
 
 def load_cycles_range(days: int = 30) -> list[BotCycleLog]:
     """Load cycles from the last N days."""
-    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    cutoff = (utcnow() - timedelta(days=days)).isoformat()
     try:
         from app.database import SessionLocal
         from app.models.portfolio import BotCycle as BotCycleModel
@@ -356,7 +358,7 @@ def get_bot_performance_stats(db_session, days: int = 30, user_id: int | None = 
         from app.models.portfolio import Trade, Portfolio
         from datetime import timedelta
 
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (utcnow() - timedelta(days=days)).isoformat()
 
         query = db_session.query(Trade).filter(
             Trade.actor == "BOT",

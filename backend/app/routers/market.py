@@ -4,12 +4,15 @@ from typing import Optional
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from datetime import datetime
-import pytz
-import urllib.request
-import json
 import threading
 import logging
+
+from app.services.market_data import (
+    COINGECKO_IDS,
+    CG_CACHE_TTL,
+    fetch_coingecko_prices,
+    is_market_open as _is_market_open,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/market", tags=["market"])
@@ -39,64 +42,6 @@ def _cache_set(key: str, data: any, ttl_seconds: int):
             expired = [k for k, v in _CACHE.items() if v[1] < now]
             for k in expired:
                 del _CACHE[k]
-
-# ── CoinGecko — source fiable pour les prix crypto ───────────────────────────
-# Remplace yfinance (sujets à corruption cross-ticker et prix aberrants)
-_COINGECKO_IDS: dict[str, str] = {
-    "BTC-USD": "bitcoin",
-    "ETH-USD": "ethereum",
-    "SOL-USD": "solana",
-}
-# Cache CoinGecko séparé (partagé entre tous les tickers crypto, 1 seul appel API)
-_CG_CACHE: dict[str, tuple[float, float]] = {}   # ticker → (price, expires_at)
-_CG_CACHE_LOCK = threading.Lock()
-_CG_TTL = 30  # secondes
-
-
-def _fetch_coingecko_prices_market() -> dict[str, float]:
-    """
-    Appel CoinGecko /simple/price pour les 3 tickers crypto du marché.
-    Retourne {ticker: price}. Cache 30s partagé.
-    """
-    import time as _time
-    now = _time.time()
-
-    # Vérifier si le cache est encore valide pour tous les tickers
-    with _CG_CACHE_LOCK:
-        result = {}
-        need_refresh = False
-        for ticker in _COINGECKO_IDS:
-            entry = _CG_CACHE.get(ticker)
-            if entry and now < entry[1]:
-                result[ticker] = entry[0]
-            else:
-                need_refresh = True
-                break
-        if not need_refresh:
-            return result
-
-    # Appel API CoinGecko
-    ids = ",".join(_COINGECKO_IDS.values())
-    url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "ThePnLab/1.0"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
-        fetched: dict[str, float] = {}
-        for ticker, cg_id in _COINGECKO_IDS.items():
-            price = data.get(cg_id, {}).get("usd")
-            if price and float(price) > 0:
-                fetched[ticker] = float(price)
-        # Stocker en cache
-        expires = now + _CG_TTL
-        with _CG_CACHE_LOCK:
-            for ticker, price in fetched.items():
-                _CG_CACHE[ticker] = (price, expires)
-        return fetched
-    except Exception as exc:
-        logger.warning(f"[CoinGecko market] Erreur: {exc}")
-        return {}
-
 
 ACTIFS = {
     "Tech US":  {"NVDA": "NVIDIA", "AAPL": "Apple", "MSFT": "Microsoft", "TSLA": "Tesla", "GOOGL": "Google", "META": "Meta", "AMD": "AMD"},
@@ -137,22 +82,6 @@ MAX_PRICE_RATIO = 10.0   # une bougie ne peut pas valoir 10x la médiane
 MIN_PRICE_RATIO = 0.1    # ni moins de 10% de la médiane
 
 
-def _is_market_open(ticker: str) -> bool:
-    if ticker in CRYPTO_TICKERS or "=F" in ticker:
-        return True  # Crypto & futures : 24/7
-    tz = pytz.timezone("Europe/Paris") if (ticker.endswith(".PA") or ticker.endswith(".AS") or ticker.endswith(".DE")) else pytz.timezone("America/New_York")
-    now = datetime.now(tz)
-    if now.weekday() >= 5:
-        return False
-    if tz.zone == "Europe/Paris":
-        open_h, open_m, close_h, close_m = 9, 0, 17, 30
-    else:
-        open_h, open_m, close_h, close_m = 9, 30, 16, 0
-    open_t  = now.replace(hour=open_h,  minute=open_m,  second=0, microsecond=0)
-    close_t = now.replace(hour=close_h, minute=close_m, second=0, microsecond=0)
-    return open_t <= now <= close_t
-
-
 def _safe_float(val) -> Optional[float]:
     """Convertit en float en filtrant NaN/inf/None."""
     try:
@@ -176,11 +105,11 @@ def _fetch_price(ticker: str) -> Optional[float]:
         return cached
 
     # ── 1. CoinGecko pour les tickers crypto ─────────────────────────────────
-    if ticker in _COINGECKO_IDS:
-        cg = _fetch_coingecko_prices_market()
+    if ticker in COINGECKO_IDS:
+        cg = fetch_coingecko_prices([ticker])
         price = cg.get(ticker)
         if price and price > 0:
-            _cache_set(cache_key, price, _CG_TTL)
+            _cache_set(cache_key, price, CG_CACHE_TTL)
             return price
         # Si CoinGecko échoue, on tombe dans le fallback yfinance ci-dessous
 

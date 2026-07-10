@@ -4,6 +4,7 @@ from typing import Optional
 from sqlalchemy import String, Float, Integer, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.services.timeutils import utcnow
 
 class Portfolio(Base):
     __tablename__ = "portfolios"
@@ -12,7 +13,7 @@ class Portfolio(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(50))
     cash: Mapped[float] = mapped_column(Float, default=10000.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Position(Base):
@@ -37,7 +38,7 @@ class Trade(Base):
     profit: Mapped[float] = mapped_column(Float, default=0.0)
     actor: Mapped[str] = mapped_column(String(10), default="USER")
     rationale: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class EquitySnapshot(Base):
@@ -47,7 +48,7 @@ class EquitySnapshot(Base):
     portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"), index=True)
     equity: Mapped[float] = mapped_column(Float, default=0.0)
     cash: Mapped[float] = mapped_column(Float, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class BotCycle(Base):
@@ -68,4 +69,4 @@ class BotCycle(Base):
     portfolio_value_after: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     cycle_duration_s: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     errors_json: Mapped[str] = mapped_column(Text, default="[]")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
