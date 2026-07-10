@@ -19,6 +19,11 @@ from app.bot.logger import (
 
 bot_router = APIRouter(prefix="/api/bot", tags=["bot"])
 
+# Cooldown global sur /trigger — le cycle est GLOBAL (tous les portfolios IA),
+# donc n'importe quel user pouvait spammer des cycles. 10 min entre deux triggers manuels.
+_TRIGGER_COOLDOWN_S = 600
+_last_manual_trigger: float = 0.0
+
 
 @bot_router.get("/report/today")
 def get_today_report(lang: str = "fr"):
@@ -57,12 +62,26 @@ def trigger_bot_cycle(
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
 ):
+    global _last_manual_trigger
+    import time as _time
+
     if is_bot_running():
         return {
             "status":  "already_running",
             "message": "Un cycle bot est déjà en cours d'exécution. Patiente 1-3 minutes.",
             "started_at": get_bot_last_start(),
         }
+
+    now = _time.monotonic()
+    elapsed = now - _last_manual_trigger
+    if _last_manual_trigger > 0 and elapsed < _TRIGGER_COOLDOWN_S:
+        remaining = int(_TRIGGER_COOLDOWN_S - elapsed)
+        return {
+            "status":  "cooldown",
+            "message": f"Cycle manuel déjà déclenché récemment. Réessaie dans {remaining // 60 + 1} min.",
+        }
+
+    _last_manual_trigger = now
     background_tasks.add_task(run_bot_cycle)
     return {
         "status":  "triggered",
@@ -112,6 +131,6 @@ def get_bot_status():
         "last_trades": last.total_trades if last else 0,
         "model":       "gemini-2.0-flash",
         "universe":    "Actions US high-beta + ETFs + Crypto + CAC40 (55+ actifs)",
-        "trade_mode":  "Momentum concentré — HIGH 28%, MEDIUM 18%, LOW 10% ($75-$4000/trade)",
-        "tp_sl":       "TP automatique +15%, SL -8%, Pyramiding +8%",
+        "trade_mode":  "Momentum concentré v5 — HIGH 15%, MEDIUM 10%, LOW 6% ($50-$3000/trade)",
+        "tp_sl":       "TP automatique +15%, SL -7%, Pyramiding +10%",
     }
