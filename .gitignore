@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+.venv/
+venv/
+*.pyc
+*.pyo
+
+# Secrets & environment — NE JAMAIS COMMIT
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env.local
+frontend/.env
+
+# DB
+data/
+*.db
+*.sqlite
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Node
+node_modules/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Outils locaux / docs internes
+.claude/
+AUDIT_REPORT.md
+THEPNLAB_AI_HANDOFF.md
