@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.models import user, portfolio, waitlist
-from app.routers import auth, market, portfolio as portfolio_router, coach, news, replay
+from app.routers import auth, market, portfolio as portfolio_router, coach, news, replay, system
 from app.routers.bot_routes import bot_router
 from app.routers.password_reset import reset_router
 from app.middleware import setup_security
@@ -40,9 +40,10 @@ except Exception as e:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        from app.bot import start_bot_scheduler
+        from app.bot import start_bot_scheduler, start_tp_sl_monitor
         start_bot_scheduler()
-        logger.info("Bot scheduler started (daemon thread)")
+        start_tp_sl_monitor()
+        logger.info("Bot scheduler + TP/SL monitor started (daemon threads)")
     except Exception as e:
         logger.error("Bot scheduler error: %s", e, exc_info=True)
 
@@ -103,6 +104,7 @@ app.include_router(news.router)
 app.include_router(bot_router)
 app.include_router(reset_router)
 app.include_router(replay.router)
+app.include_router(system.router)
 
 
 @app.get("/")

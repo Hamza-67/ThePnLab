@@ -125,7 +125,7 @@ def get_bot_status():
         "active":      True,
         "running":     is_bot_running(),
         "started_at":  get_bot_last_start(),
-        "schedule":    "Toutes les 30min (9h-22h Paris, lun-ven)",
+        "schedule":    "Toutes les heures (9h-22h Paris lun-ven, crypto 24/7 weekend, pause 0h-7h) + monitor TP/SL 10min",
         "timezone":    "Europe/Paris",
         "last_cycle":  last.timestamp if last else None,
         "last_trades": last.total_trades if last else 0,
