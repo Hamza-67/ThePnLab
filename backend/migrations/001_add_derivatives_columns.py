@@ -6,7 +6,8 @@ fait des ALTER TABLE idempotents (IF NOT EXISTS) pour la DB Railway.
 
 Usage (une seule fois, APRÈS backup de la DB) :
     railway run python migrations/001_add_derivatives_columns.py
-En local SQLite, create_all suffit — ce script n'est utile que pour Postgres.
+Fonctionne aussi en local SQLite (ALTER sans IF NOT EXISTS, erreurs
+"duplicate column" ignorées — le script reste idempotent).
 """
 import sys
 from pathlib import Path
@@ -36,15 +37,21 @@ STATEMENTS = [
 
 
 def main():
-    if engine.dialect.name == "sqlite":
-        print("SQLite détecté — utiliser create_all (rien à faire ici).")
-        return
-
-    with engine.begin() as conn:
-        for stmt in STATEMENTS:
-            print(f"→ {stmt}")
-            conn.execute(text(stmt))
-    print(f"OK — {len(STATEMENTS)} colonnes vérifiées/ajoutées.")
+    is_sqlite = engine.dialect.name == "sqlite"
+    added = 0
+    for stmt in STATEMENTS:
+        # SQLite ne supporte pas IF NOT EXISTS sur ADD COLUMN
+        sql = stmt.replace("IF NOT EXISTS ", "") if is_sqlite else stmt
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(sql))
+            print(f"+ {sql}")   # ASCII : la console Windows est en cp1252
+            added += 1
+        except Exception as e:
+            if "duplicate column" in str(e).lower():
+                continue   # déjà migré — idempotent
+            raise
+    print(f"OK — {added} colonne(s) ajoutée(s), {len(STATEMENTS) - added} déjà présentes.")
 
 
 if __name__ == "__main__":
