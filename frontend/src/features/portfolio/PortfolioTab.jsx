@@ -310,7 +310,7 @@ export default function PortfolioTab() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', minWidth: 560 }}>
                   <thead>
                     <tr style={{ color: 'var(--muted)', fontSize: '0.72rem', textTransform: 'uppercase' }}>
-                      {['Ticker', t('Qté', 'Qty'), t('Prix moy.', 'Avg'), t('Cours', 'Last'), t('Valeur', 'Value'), 'PnL', '%'].map(h => (
+                      {['Ticker', 'Type', t('Qté', 'Qty'), t('Prix moy.', 'Avg'), t('Cours', 'Last'), t('Liq.', 'Liq.'), t('Valeur', 'Value'), 'PnL', '%'].map(h => (
                         <th key={h} style={{ padding: '6px 12px', textAlign: 'left', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -322,9 +322,29 @@ export default function PortfolioTab() {
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
                         <td style={{ padding: '10px 12px', color: '#9F6CF0', fontWeight: 700, fontFamily: 'DM Mono' }}>{p.ticker}</td>
+                        <td style={{ padding: '10px 12px' }}>
+                          {p.instrument_type && p.instrument_type !== 'SPOT' ? (
+                            <span style={{
+                              padding: '2px 7px', borderRadius: 5, fontSize: '0.68rem', fontWeight: 700, fontFamily: 'DM Mono', whiteSpace: 'nowrap',
+                              background: p.direction === 'SHORT' ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+                              color: p.direction === 'SHORT' ? '#EF4444' : '#10B981',
+                              border: `1px solid ${p.direction === 'SHORT' ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`,
+                            }}>
+                              {p.instrument_type === 'FUTURES' ? 'FUT' : 'CFD'} {p.direction === 'SHORT' ? '▼' : '▲'} ×{Math.round(p.leverage || 1)}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.25)', fontFamily: 'DM Mono' }}>Spot</span>
+                          )}
+                        </td>
                         <td style={{ padding: '10px 12px', color: 'var(--text)', fontFamily: 'DM Mono', fontSize: '0.78rem' }}>{p.quantity}</td>
                         <td style={{ padding: '10px 12px', color: 'var(--muted)', fontFamily: 'DM Mono' }}>${p.avg_price}</td>
                         <td style={{ padding: '10px 12px', color: '#60A5FA', fontFamily: 'DM Mono' }}>${p.last_price}</td>
+                        <td style={{ padding: '10px 12px', fontFamily: 'DM Mono', fontSize: '0.78rem',
+                          // Rouge vif si le cours est à moins de 20% du prix de liquidation
+                          color: p.liquidation_price && Math.abs(p.last_price - p.liquidation_price) / p.last_price < 0.2 ? '#EF4444' : 'rgba(255,255,255,0.3)',
+                          fontWeight: p.liquidation_price ? 700 : 400 }}>
+                          {p.liquidation_price ? `$${p.liquidation_price.toFixed(2)}` : '—'}
+                        </td>
                         <td style={{ padding: '10px 12px', color: '#F59E0B', fontWeight: 600, fontFamily: 'DM Mono' }}>${p.value?.toFixed(2)}</td>
                         <td style={{ padding: '10px 12px', color: p.pnl >= 0 ? '#10B981' : '#EF4444', fontWeight: 700, fontFamily: 'DM Mono' }}>{p.pnl >= 0 ? '+' : ''}${p.pnl?.toFixed(2)}</td>
                         <td style={{ padding: '10px 12px' }}>

@@ -3,6 +3,7 @@ import API from '../../api/client'
 import Chart from '../../components/Chart'
 import { useT, useLang } from '../../context/LangContext'
 import useIsMobile from '../../lib/useIsMobile'
+import { initialMarginCfd, liquidationPrice, overnightFinancing, leverageCap, LEVERAGE_MIN, FUTURES_MARGIN_RATIO } from '../../lib/margin'
 
 // Tickers CAC40 — même set que dans Chart.jsx
 const CAC40_SET = new Set(['MC.PA','OR.PA','TTE.PA','AIR.PA','RMS.PA','BNP.PA','SAN.PA','AI.PA','SU.PA','BN.PA','CAP.PA','STM.PA','VIE.PA','DG.PA','SGO.PA'])
@@ -117,6 +118,9 @@ export default function MarketTab({ showToast }) {
   const [indInterval, setIndInterval]   = useState('1d')
   const [mode, setMode]                 = useState('qty')
   const [val, setVal]                   = useState(1)
+  const [instrument, setInstrument]     = useState('SPOT')   // SPOT | CFD | FUTURES
+  const [direction, setDirection]       = useState('LONG')   // LONG | SHORT (dérivés)
+  const [leverage, setLeverage]         = useState(5)
   const [msg, setMsg]                   = useState('')
   const [msgOk, setMsgOk]              = useState(true)
   const [searchQuery, setSearchQuery]   = useState('')
@@ -218,7 +222,13 @@ export default function MarketTab({ showToast }) {
 
   const order = async (side) => {
     try {
-      const r = await API.post('/api/portfolio/order', { ticker, side, mode, value: parseFloat(val), portfolio: 'USER' })
+      const payload = { ticker, side, mode, value: parseFloat(val), portfolio: 'USER' }
+      if (instrument !== 'SPOT') {
+        payload.instrument_type = instrument
+        payload.direction = direction
+        payload.leverage = leverage
+      }
+      const r = await API.post('/api/portfolio/order', payload)
       setMsg(r.data.message); setMsgOk(true)
       showToast?.(r.data.message)
       refreshPositions()
@@ -227,6 +237,31 @@ export default function MarketTab({ showToast }) {
     }
     setTimeout(() => setMsg(''), 4000)
   }
+
+  // Clamp le levier au cap du ticker (crypto x5 max) quand on change d'actif
+  useEffect(() => {
+    const cap = leverageCap(ticker)
+    if (leverage > cap) setLeverage(cap)
+  }, [ticker])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Preview marge + liquidation (miroir des formules backend) ────────────
+  const derivPreview = (() => {
+    if (instrument === 'SPOT' || !ind?.price || !(val > 0)) return null
+    const price = ind.price
+    const lev   = instrument === 'FUTURES' ? Math.round(1 / FUTURES_MARGIN_RATIO) : leverage
+    // mode "amount" = marge investie → notionnel = marge × levier
+    const marginIn = mode === 'amount' ? val : (val * price) / lev
+    const notional = marginIn * lev
+    const qty      = notional / price
+    return {
+      lev,
+      margin:    mode === 'amount' ? val : initialMarginCfd(notional, lev),
+      notional,
+      qty,
+      liq:       liquidationPrice(direction, price, lev),
+      overnight: instrument === 'CFD' ? overnightFinancing(notional) : 0,
+    }
+  })()
 
   useEffect(() => {
     coachEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -507,10 +542,66 @@ export default function MarketTab({ showToast }) {
             <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.83rem', margin: '16px 0', textAlign: 'center' }}>{t('Chargement…','Loading…')}</div>
           )}
 
+          {/* ── Switch produit : Spot / CFD / Futures ── */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            {['SPOT', 'CFD', 'FUTURES'].map(inst => (
+              <button key={inst} onClick={() => { setInstrument(inst); if (inst !== 'SPOT' && mode === 'qty') { setMode('amount'); setVal(100) } }} style={{
+                flex: 1, padding: '7px 4px', borderRadius: 8, cursor: 'pointer',
+                fontFamily: 'DM Mono', fontSize: '0.74rem', fontWeight: 700, letterSpacing: 0.5,
+                background: instrument === inst ? 'rgba(124,58,237,0.22)' : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${instrument === inst ? 'rgba(124,58,237,0.45)' : 'var(--border)'}`,
+                color: instrument === inst ? '#C4B5FD' : 'var(--muted)',
+              }}>
+                {inst === 'SPOT' ? 'Spot' : inst === 'CFD' ? 'CFD' : 'Futures'}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Contrôles dérivés : direction + levier ── */}
+          {instrument !== 'SPOT' && (
+            <div style={{ background: 'rgba(124,58,237,0.05)', border: '1px solid rgba(124,58,237,0.18)', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                {['LONG', 'SHORT'].map(d => (
+                  <button key={d} onClick={() => setDirection(d)} style={{
+                    flex: 1, padding: '7px', borderRadius: 8, cursor: 'pointer',
+                    fontFamily: 'DM Sans', fontSize: '0.8rem', fontWeight: 700,
+                    background: direction === d ? (d === 'LONG' ? 'rgba(16,185,129,0.18)' : 'rgba(239,68,68,0.18)') : 'transparent',
+                    border: `1px solid ${direction === d ? (d === 'LONG' ? 'rgba(16,185,129,0.45)' : 'rgba(239,68,68,0.45)') : 'var(--border)'}`,
+                    color: direction === d ? (d === 'LONG' ? '#10B981' : '#EF4444') : 'var(--muted)',
+                  }}>
+                    {d === 'LONG' ? `▲ Long` : `▼ Short`}
+                  </button>
+                ))}
+              </div>
+
+              {instrument === 'CFD' ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8 }}>{t('Levier','Leverage')}</span>
+                    <span style={{ fontFamily: 'DM Mono', fontWeight: 700, color: '#C4B5FD', fontSize: '0.85rem' }}>×{leverage}</span>
+                  </div>
+                  <input
+                    type="range" min={LEVERAGE_MIN} max={leverageCap(ticker)} step={1}
+                    value={leverage} onChange={e => setLeverage(Number(e.target.value))}
+                    style={{ width: '100%', accentColor: '#7C3AED', cursor: 'pointer' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: 'rgba(255,255,255,0.25)', fontFamily: 'DM Mono' }}>
+                    <span>×{LEVERAGE_MIN}</span><span>×{leverageCap(ticker)}</span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: '0.72rem', color: 'var(--muted)', lineHeight: 1.5 }}>
+                  {t('Marge 10% (levier ×10) · échéance trimestrielle auto · mark-to-market quotidien',
+                     '10% margin (×10 leverage) · auto quarterly expiry · daily mark-to-market')}
+                </div>
+              )}
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             {['qty', 'amount'].map(m => (
               <button key={m} onClick={() => { setMode(m); setVal(m === 'qty' ? 1 : 100) }} style={{ flex: 1, padding: '7px', borderRadius: 8, cursor: 'pointer', fontFamily: 'DM Sans', fontSize: '0.8rem', fontWeight: 600, background: mode === m ? 'rgba(124,58,237,0.2)' : 'transparent', border: `1px solid ${mode === m ? 'rgba(124,58,237,0.4)' : 'var(--border)'}`, color: mode === m ? '#9F6CF0' : 'var(--muted)' }}>
-                {m === 'qty' ? t('# Actions','# Shares') : t('Montant $','Amount $')}
+                {m === 'qty' ? (instrument === 'SPOT' ? t('# Actions','# Shares') : t('# Unités','# Units')) : (instrument === 'SPOT' ? t('Montant $','Amount $') : t('Marge $','Margin $'))}
               </button>
             ))}
           </div>
@@ -537,13 +628,33 @@ export default function MarketTab({ showToast }) {
             </div>
           )}
 
-          {/* Estimation */}
-          {ind?.price > 0 && val > 0 && (
+          {/* Estimation spot */}
+          {instrument === 'SPOT' && ind?.price > 0 && val > 0 && (
             <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginBottom: 10, padding: '5px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 7, fontFamily: 'DM Mono' }}>
               {mode === 'amount'
                 ? `≈ ${(val / ind.price).toFixed(4)} ${t('actions', 'shares')} @ $${ind.price?.toFixed(2)}`
                 : `≈ $${(val * ind.price).toFixed(2)} ${t('total', 'total')}`
               }
+            </div>
+          )}
+
+          {/* ── Preview dérivés : marge, notionnel, prix de liquidation ── */}
+          {derivPreview && (
+            <div style={{ fontSize: '0.74rem', marginBottom: 10, padding: '8px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 8, fontFamily: 'DM Mono', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {[
+                { label: t('Marge bloquée','Locked margin'),      val: `$${derivPreview.margin.toFixed(2)}`, color: '#C4B5FD' },
+                { label: t('Exposition','Exposure'),              val: `$${derivPreview.notional.toFixed(2)} (×${derivPreview.lev})`, color: '#fff' },
+                { label: t('Quantité','Quantity'),                val: derivPreview.qty.toFixed(4), color: 'var(--muted)' },
+                { label: t('⚠ Prix de liquidation','⚠ Liquidation price'), val: `$${derivPreview.liq.toFixed(2)}`, color: '#EF4444' },
+                ...(derivPreview.overnight > 0
+                  ? [{ label: t('Frais overnight / nuit','Overnight fee / night'), val: `−$${derivPreview.overnight.toFixed(2)}`, color: '#F59E0B' }]
+                  : []),
+              ].map((row, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--muted)' }}>{row.label}</span>
+                  <span style={{ color: row.color, fontWeight: 700 }}>{row.val}</span>
+                </div>
+              ))}
             </div>
           )}
 
@@ -553,24 +664,42 @@ export default function MarketTab({ showToast }) {
               disabled={!mktStatus.open}
               title={!mktStatus.open ? mktStatus.label : ''}
               style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none',
-                background: mktStatus.open ? 'linear-gradient(135deg, #059669, #10B981)' : 'rgba(255,255,255,0.06)',
+                background: !mktStatus.open ? 'rgba(255,255,255,0.06)'
+                  : instrument !== 'SPOT' && direction === 'SHORT' ? 'linear-gradient(135deg, #DC2626, #EF4444)'
+                  : 'linear-gradient(135deg, #059669, #10B981)',
                 color: mktStatus.open ? '#fff' : 'var(--muted)',
                 fontFamily: 'DM Sans', fontWeight: 700, fontSize: '0.9rem',
                 cursor: mktStatus.open ? 'pointer' : 'not-allowed', opacity: mktStatus.open ? 1 : 0.5 }}>
-              {t('Acheter','Buy')}
+              {instrument === 'SPOT'
+                ? t('Acheter','Buy')
+                : `${t('Ouvrir','Open')} ${direction === 'LONG' ? 'Long' : 'Short'}${instrument === 'CFD' ? ` ×${leverage}` : ''}`}
             </button>
             <button
               onClick={() => order('SELL')}
               disabled={!mktStatus.open}
               title={!mktStatus.open ? mktStatus.label : ''}
-              style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none',
-                background: mktStatus.open ? 'linear-gradient(135deg, #DC2626, #EF4444)' : 'rgba(255,255,255,0.06)',
+              style={{ flex: 1, padding: '11px', borderRadius: 10,
+                background: !mktStatus.open ? 'rgba(255,255,255,0.06)'
+                  : instrument !== 'SPOT' ? 'rgba(255,255,255,0.08)'
+                  : 'linear-gradient(135deg, #DC2626, #EF4444)',
                 color: mktStatus.open ? '#fff' : 'var(--muted)',
+                border: instrument !== 'SPOT' && mktStatus.open ? '1px solid rgba(255,255,255,0.15)' : 'none',
                 fontFamily: 'DM Sans', fontWeight: 700, fontSize: '0.9rem',
                 cursor: mktStatus.open ? 'pointer' : 'not-allowed', opacity: mktStatus.open ? 1 : 0.5 }}>
-              {t('Vendre','Sell')}
+              {instrument === 'SPOT' ? t('Vendre','Sell') : t('Fermer','Close')}
             </button>
           </div>
+
+          {/* Note pédagogique dérivés — c'est le but de l'app */}
+          {instrument !== 'SPOT' && (
+            <div style={{ marginTop: 8, fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', lineHeight: 1.5 }}>
+              {instrument === 'CFD'
+                ? t('💡 CFD : tu ne détiens pas l\'actif. La marge est bloquée, le levier amplifie gains ET pertes. Si le prix touche le seuil de liquidation, la position est fermée automatiquement.',
+                    '💡 CFD: you don\'t own the asset. Margin is locked, leverage amplifies gains AND losses. If price hits the liquidation level, the position is force-closed.')
+                : t('💡 Futures : contrat à échéance trimestrielle, réglé chaque jour (mark-to-market). À l\'échéance, la position est soldée au prix de règlement.',
+                    '💡 Futures: quarterly contract, settled daily (mark-to-market). At expiry the position is settled at the settlement price.')}
+            </div>
+          )}
 
           {msg && (
             <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: msgOk ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${msgOk ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, fontSize: '0.82rem', color: msgOk ? '#6EE7B7' : '#FCA5A5' }}>
