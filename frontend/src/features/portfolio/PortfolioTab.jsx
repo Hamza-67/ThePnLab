@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import API from '../../api/client'
 import { useT } from '../../context/LangContext'
 import useIsMobile from '../../lib/useIsMobile'
+import RiskMetrics from './RiskMetrics'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 
 /* ══════════════════════════════════════════
@@ -209,6 +210,8 @@ export default function PortfolioTab() {
               </div>
             </div>
           )}
+
+          <RiskMetrics pf={pf} />
 
           {sellTrades.length > 0 && (
             <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>

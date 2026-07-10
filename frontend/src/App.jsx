@@ -10,14 +10,26 @@ import AboutPage from './pages/AboutPage'
 import PrivacyPage from './pages/PrivacyPage'
 import Profile from './pages/Profile'
 import ErrorBoundary from './components/ErrorBoundary'
+import Maintenance from './pages/Maintenance'
+import API from './api/client'
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('tl_token'))
+  const [maintenance, setMaintenance] = useState(false)
 
   useEffect(() => {
     if (token) localStorage.setItem('tl_token', token)
     else localStorage.removeItem('tl_token')
   }, [token])
+
+  // Mode maintenance : lu au boot depuis le backend (flag MAINTENANCE_MODE)
+  useEffect(() => {
+    API.get('/api/system/status')
+      .then(r => setMaintenance(!!r.data.maintenance))
+      .catch(() => {})   // backend injoignable ≠ maintenance volontaire
+  }, [])
+
+  if (maintenance) return <Maintenance />
 
   return (
     <ErrorBoundary>

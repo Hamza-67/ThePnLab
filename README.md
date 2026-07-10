@@ -59,6 +59,7 @@ Le front tourne sur `http://localhost:5173` et proxifie `/api` vers le backend s
 | `NEWSAPI_KEY` | News macro | Non |
 | `ALLOWED_ORIGINS` | CORS | Non (défaut localhost + prod) |
 | `QUIET_HOURS` | Pause du bot la nuit (ex: `0-7`) | Non |
+| `MAINTENANCE_MODE` | `1` = affiche la page maintenance | Non |
 
 ## Structure
 
