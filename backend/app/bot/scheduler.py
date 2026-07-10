@@ -15,12 +15,34 @@ from app.bot.cycle import run_bot_cycle
 logger = logging.getLogger(__name__)
 
 
+def _parse_quiet_hours() -> tuple[int, int]:
+    """Parse QUIET_HOURS 'start-end' (heure Paris). Fenêtre invalide → (0, 0) = désactivé."""
+    from app.config import QUIET_HOURS
+    try:
+        start, end = QUIET_HOURS.split("-")
+        return int(start), int(end)
+    except Exception:
+        return 0, 0
+
+
+def _in_quiet_hours(hour: int) -> bool:
+    start, end = _parse_quiet_hours()
+    if start == end:
+        return False
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end  # fenêtre qui passe minuit (ex: 23-6)
+
+
 def _should_run_now() -> bool:
     """
-    Lun-ven 9h00-22h00 Paris → actions EU + US + crypto
-    Weekend → crypto 24/7 (toutes les 30min)
+    Quiet hours (défaut 0h-7h Paris) → jamais, même le weekend (coûts Railway).
+    Lun-ven 9h00-22h00 Paris → actions EU + US + crypto.
+    Weekend hors quiet hours → crypto 24/7.
     """
     now = datetime.now(PARIS_TZ)
+    if _in_quiet_hours(now.hour):
+        return False
     if now.weekday() >= 5:
         return True   # weekend : crypto 24/7
     return 9 <= now.hour < 22
@@ -29,7 +51,7 @@ def _should_run_now() -> bool:
 def _bot_thread_loop():
     """
     Thread daemon : vérifie toutes les 20 secondes si on est dans une fenêtre
-    de déclenchement (:00 ± 2min ou :30 ± 2min, heure Paris).
+    de déclenchement (:00 ± 2min, heure Paris — un cycle par heure).
 
     Approche HEARTBEAT — 100% fiable, aucun calcul de timing complexe.
     Garantit qu'aucun cycle ne sera manqué même après un redémarrage Railway.
@@ -42,19 +64,19 @@ def _bot_thread_loop():
     cycle courant → le bot ne se déclenchait JAMAIS automatiquement.
     """
     last_run_key = ""
-    logger.info("Bot scheduler démarré — heartbeat 20s, déclenchement :00/:30 Paris")
+    logger.info("Bot scheduler démarré — heartbeat 20s, déclenchement toutes les heures (:00 Paris)")
 
     while True:
         try:
             now  = datetime.now(PARIS_TZ)
 
-            # Clé unique par fenêtre de déclenchement (une par demi-heure)
-            # Ex : "2024-01-15T10:30" pour toute la fenêtre 10:30-10:32
-            half    = 0 if now.minute < 30 else 30
-            run_key = f"{now.strftime('%Y-%m-%d')}T{now.hour:02d}:{half:02d}"
+            # Clé unique par fenêtre de déclenchement (une par heure)
+            # v6 : 30min → 1h. Le screener + LLM à chaque demi-heure coûtait cher
+            # (API + CPU Railway) sans gain — le TP/SL est géré par le monitor 10min.
+            run_key = f"{now.strftime('%Y-%m-%d')}T{now.hour:02d}:00"
 
-            # Fenêtre de déclenchement : minutes 0, 1, 2 ou 30, 31, 32
-            in_window = now.minute in (0, 1, 2, 30, 31, 32)
+            # Fenêtre de déclenchement : minutes 0, 1, 2
+            in_window = now.minute in (0, 1, 2)
 
             if in_window and run_key != last_run_key:
                 last_run_key = run_key

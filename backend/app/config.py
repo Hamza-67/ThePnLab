@@ -23,6 +23,10 @@ GEMINI_KEY              = os.getenv("GEMINI_KEY", "")
 MISTRAL_KEY             = os.getenv("MISTRAL_KEY", "")
 NEWSAPI_KEY             = os.getenv("NEWSAPI_KEY", "")
 
+# Quiet hours (heure Paris) — le bot ne tourne pas dans cette fenêtre (coûts Railway)
+QUIET_HOURS             = os.getenv("QUIET_HOURS", "0-7")
+MAINTENANCE_MODE        = os.getenv("MAINTENANCE_MODE", "0") in ("1", "true", "True")
+
 STARTING_CASH           = float(os.getenv("STARTING_CASH", "10000"))
 MAX_POSITION_PCT        = float(os.getenv("MAX_POSITION_PCT", "0.15"))
 FEE_RATE                = float(os.getenv("FEE_RATE", "0.001"))
