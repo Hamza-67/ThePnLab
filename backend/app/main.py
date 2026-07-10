@@ -40,7 +40,7 @@ except Exception as e:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        from app.routers.bot_engine import start_bot_scheduler
+        from app.bot import start_bot_scheduler
         start_bot_scheduler()
         logger.info("Bot scheduler started (daemon thread)")
     except Exception as e:

@@ -14,7 +14,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _FuturesTimeout
 from dataclasses import dataclass, field
 
-from app.routers.bot_screener import ScreenedAsset
+from app.bot.screener import ScreenedAsset
 from app.config import GEMINI_KEY
 
 logger = logging.getLogger(__name__)

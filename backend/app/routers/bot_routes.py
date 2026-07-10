@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth import get_current_user
 from app.models.user import User
-from app.routers.bot_engine import run_bot_cycle, reset_bot_portfolio, is_bot_running, get_bot_last_start
-from app.routers.bot_logger import (
+from app.bot import run_bot_cycle, reset_bot_portfolio, is_bot_running, get_bot_last_start
+from app.bot.logger import (
     load_today_cycles, load_last_cycle,
     generate_daily_report, get_bot_performance_stats,
     load_cycles_paginated, generate_history_report,
