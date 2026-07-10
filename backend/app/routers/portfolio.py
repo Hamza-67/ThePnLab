@@ -611,6 +611,67 @@ def audit_portfolio(
     }
 
 
+@router.get("/metrics")
+def risk_metrics(
+    portfolio: str = "USER",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Métriques de risque calculées sur les snapshots d'équité (1 point/jour) :
+    Sharpe annualisé (rf=0), volatilité annualisée, max drawdown, rendement total.
+    """
+    import math
+
+    pf = _get_portfolio(db, user.id, portfolio)
+    snaps = db.query(EquitySnapshot).filter(
+        EquitySnapshot.portfolio_id == pf.id
+    ).order_by(EquitySnapshot.id.asc()).limit(2000).all()
+
+    # 1 point par jour calendaire (dernier snapshot de la journée)
+    day_map: dict[str, float] = {}
+    for s in snaps:
+        day_map[s.created_at.strftime("%Y-%m-%d")] = float(s.equity)
+    series = [day_map[d] for d in sorted(day_map)]
+
+    if len(series) < 3:
+        return {"status": "no_data", "message": "Pas assez d'historique (minimum 3 jours)"}
+
+    # Rendements journaliers
+    returns = [
+        series[i] / series[i - 1] - 1
+        for i in range(1, len(series)) if series[i - 1] > 0
+    ]
+    if not returns:
+        return {"status": "no_data", "message": "Historique invalide"}
+
+    mean_r = sum(returns) / len(returns)
+    var_r  = sum((r - mean_r) ** 2 for r in returns) / len(returns)
+    std_r  = math.sqrt(var_r)
+
+    ANNUAL = math.sqrt(252)
+    volatility_pct = std_r * ANNUAL * 100
+    sharpe = (mean_r / std_r * ANNUAL) if std_r > 0 else 0.0
+
+    # Max drawdown : pire chute depuis un sommet
+    peak, max_dd = series[0], 0.0
+    for e in series:
+        peak = max(peak, e)
+        if peak > 0:
+            max_dd = max(max_dd, (peak - e) / peak)
+
+    total_return_pct = (series[-1] / series[0] - 1) * 100 if series[0] > 0 else 0.0
+
+    return {
+        "status":           "ok",
+        "days":             len(series),
+        "sharpe":           round(sharpe, 2),
+        "volatility_pct":   round(volatility_pct, 2),
+        "max_drawdown_pct": round(max_dd * 100, 2),
+        "total_return_pct": round(total_return_pct, 2),
+    }
+
+
 @router.get("/leaderboard")
 def leaderboard(db: Session = Depends(get_db)):
     portfolios = db.query(Portfolio).filter(Portfolio.name == "USER").all()
