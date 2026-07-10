@@ -9,6 +9,7 @@ import NotFound from './pages/NotFound'
 import AboutPage from './pages/AboutPage'
 import PrivacyPage from './pages/PrivacyPage'
 import Profile from './pages/Profile'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('tl_token'))
@@ -19,6 +20,7 @@ function App() {
   }, [token])
 
   return (
+    <ErrorBoundary>
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/about" element={<AboutPage />} />
@@ -33,6 +35,7 @@ function App() {
         element={token ? <Dashboard token={token} setToken={setToken} /> : <Navigate to="/login" />}
       />
     </Routes>
+    </ErrorBoundary>
   )
 }
 

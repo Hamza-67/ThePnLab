@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+/* ── Design tokens Tailwind 4 — mêmes valeurs que les vars :root ci-dessous ──
+   Permet d'écrire bg-bg, text-muted, border-border-soft, font-title, etc.
+   La DA (violet sombre) ne change pas : on mappe l'existant, rien de nouveau. */
+@theme {
+  --color-bg:           #08090F;
+  --color-bg2:          #0D0F1A;
+  --color-surface:      rgba(255,255,255,0.035);
+  --color-border-soft:  rgba(255,255,255,0.07);
+  --color-violet:       #7C3AED;
+  --color-violet-light: #9F6CF0;
+  --color-violet-pale:  #C4B5FD;
+  --color-indigo:       #4F46E5;
+  --color-green:        #10B981;
+  --color-red:          #EF4444;
+  --color-gold:         #F59E0B;
+  --color-text-main:    #EEF0F5;
+  --color-muted:        #566078;
+
+  --font-title: "Syne", sans-serif;
+  --font-body:  "DM Sans", sans-serif;
+  --font-mono:  "DM Mono", monospace;
+
+  --radius-card:  16px;
+  --radius-field: 10px;
+}
+
 * {
   margin: 0;
   padding: 0;
