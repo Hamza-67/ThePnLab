@@ -51,6 +51,29 @@ class EquitySnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class TradeFeature(Base):
+    """Features techniques capturées au moment d'un BUY bot — dataset futur XGBoost."""
+    __tablename__ = "trade_features"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trade_id: Mapped[int] = mapped_column(ForeignKey("trades.id"), index=True)
+    ticker: Mapped[str] = mapped_column(String(20))
+    rsi: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    macd_signal: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    adx: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    atr_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    volume_surge: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    momentum_1d: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    momentum_5d: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    bb_position: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    above_sma50: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    vix: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    spy_change: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    regime: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # BULL | BEAR | UNKNOWN
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class BotCycle(Base):
     __tablename__ = "bot_cycles"
 

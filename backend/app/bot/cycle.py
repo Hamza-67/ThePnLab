@@ -22,7 +22,7 @@ from app.bot.logger import save_bot_cycle, BotCycleLog
 from app.bot import state
 from app.bot.params import (
     PARIS_TZ, NY_TZ, BOT_PORTFOLIO_NAME, CRYPTO_TICKERS, NEVER_BAN_TICKERS,
-    SPY_DROP_THRESHOLD, VIX_HIGH_THRESHOLD, VIX_EXTREME,
+    LEVERAGED_ETFS, SPY_DROP_THRESHOLD, VIX_HIGH_THRESHOLD, VIX_EXTREME,
     TP_THRESHOLD, SL_THRESHOLD, MAX_OPEN_POSITIONS,
 )
 from app.bot.pricing import _get_price, clear_price_cache
@@ -95,19 +95,29 @@ def _get_tradable_tickers(tickers: list[str]) -> list[str]:
 # MARKET CONTEXT
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _get_spy_change() -> Optional[float]:
+def _get_spy_data() -> tuple[Optional[float], Optional[bool]]:
+    """
+    Un seul download SPY 3 mois → (variation journalière, close > SMA50).
+    Le régime SMA50 sert de filtre HARD : sous la SMA50, on n'achète plus
+    d'actions US ni d'ETF leveraged (le bot a perdu -$250 en achetant
+    des dips dans un marché baissier).
+    """
     try:
-        df = yf.download("SPY", period="5d", interval="1d", progress=False, auto_adjust=True, timeout=8)
+        df = yf.download("SPY", period="3mo", interval="1d", progress=False, auto_adjust=True, timeout=8)
         if df is None or len(df) < 2:
-            return None
+            return None, None
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         closes = df["Close"].dropna()
         change = (float(closes.iloc[-1]) - float(closes.iloc[-2])) / float(closes.iloc[-2])
-        return round(change, 4)
+        above_sma50 = None
+        if len(closes) >= 50:
+            sma50 = float(closes.rolling(50).mean().iloc[-1])
+            above_sma50 = float(closes.iloc[-1]) > sma50
+        return round(change, 4), above_sma50
     except Exception as e:
         logger.warning(f"SPY fetch error: {e}")
-        return None
+        return None, None
 
 
 def _get_vix() -> Optional[float]:
@@ -300,13 +310,13 @@ def run_bot_cycle() -> BotCycleLog:
         # ce qui BLOQUE si un thread yfinance est pendu. On utilise shutdown(wait=False).
         logger.info("Fetching SPY/VIX/News in parallel...")
         _ex_macro = _TPE(max_workers=3)
-        _spy_fut  = _ex_macro.submit(_get_spy_change)
+        _spy_fut  = _ex_macro.submit(_get_spy_data)
         _vix_fut  = _ex_macro.submit(_get_vix)
         _news_fut = _ex_macro.submit(_get_macro_news, 8)
         try:
-            spy_change = _spy_fut.result(timeout=20)
+            spy_change, spy_above_sma50 = _spy_fut.result(timeout=20)
         except Exception:
-            spy_change = None
+            spy_change, spy_above_sma50 = None, None
         try:
             vix = _vix_fut.result(timeout=20)
         except Exception:
@@ -500,6 +510,7 @@ def run_bot_cycle() -> BotCycleLog:
         # 6. IA
         market_context = {
             "spy_change_pct":        round(spy_change * 100, 2) if spy_change else None,
+            "spy_above_sma50":       spy_above_sma50,
             "vix":                   vix,
             "vix_regime":            vix_reason,
             "position_multiplier":   position_multiplier,
@@ -553,6 +564,16 @@ def run_bot_cycle() -> BotCycleLog:
                     cycle_log.errors.append(f"VIX panic: BUY {d.ticker} bloqué (VIX={vix:.1f})")
                     continue
 
+                # Guard 5 : régime baissier — SPY < SMA50 → veto BUY actions US
+                # et ETF leveraged. Filtre HARD en code (pas une consigne prompt) :
+                # acheter du momentum dans un downtrend est la cause des pertes v4/v5.
+                if spy_above_sma50 is False:
+                    is_us_equity = d.ticker not in CRYPTO_TICKERS and not d.ticker.endswith(".PA")
+                    if is_us_equity or d.ticker in LEVERAGED_ETFS:
+                        logger.warning(f"[POST-LLM] BUY {d.ticker} bloqué — régime baissier (SPY < SMA50)")
+                        cycle_log.errors.append(f"regime_veto: BUY {d.ticker} bloqué (SPY < SMA50)")
+                        continue
+
             filtered_decisions.append(d)
 
         decisions = filtered_decisions
@@ -582,6 +603,10 @@ def run_bot_cycle() -> BotCycleLog:
         # 8. Exécution sur tous les portfolios IA
         all_pf = db.query(Portfolio).filter(Portfolio.name == BOT_PORTFOLIO_NAME).all()
 
+        # Features techniques par ticker (dataset XGBoost) — capturées au BUY
+        assets_by_ticker = {a.ticker: a for a in assets}
+        regime = "UNKNOWN" if spy_above_sma50 is None else ("BULL" if spy_above_sma50 else "BEAR")
+
         for decision in decisions:
             if decision.action == "HOLD":
                 continue
@@ -590,9 +615,29 @@ def run_bot_cycle() -> BotCycleLog:
                 cycle_log.errors.append(f"Prix indisponible: {decision.ticker}")
                 continue
 
+            features = None
+            if decision.action == "BUY":
+                a = assets_by_ticker.get(decision.ticker)
+                if a:
+                    features = {
+                        "rsi":          a.rsi,
+                        "macd_signal":  a.macd_signal,
+                        "adx":          a.adx,
+                        "atr_pct":      a.atr_pct,
+                        "volume_surge": a.volume_surge,
+                        "momentum_1d":  a.momentum_1d,
+                        "momentum_5d":  a.momentum_5d,
+                        "bb_position":  a.bb_position,
+                        "above_sma50":  a.above_sma50,
+                        "score":        a.score,
+                        "vix":          vix,
+                        "spy_change":   spy_change,
+                        "regime":       regime,
+                    }
+
             results = []
             for pf in all_pf:
-                ok, msg = _execute(db, pf, decision, price, position_multiplier)
+                ok, msg = _execute(db, pf, decision, price, position_multiplier, features=features)
                 if ok:
                     cycle_log.total_trades += 1
                     logger.info(f"  [{pf.id}] {msg}")

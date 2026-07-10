@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 
-from app.models.portfolio import Portfolio, Position, Trade, EquitySnapshot
+from app.models.portfolio import Portfolio, Position, Trade, EquitySnapshot, TradeFeature
 from app.config import FEE_RATE, SLIPPAGE_BPS
 from app.bot.brain import BotDecision
 from app.bot.params import (
@@ -59,6 +59,7 @@ def _execute(
     decision: BotDecision,
     price: float,
     position_multiplier: float,
+    features: dict | None = None,
 ) -> tuple[bool, str]:
     FEE  = float(FEE_RATE)
     SLIP = float(SLIPPAGE_BPS) / 10_000
@@ -123,7 +124,7 @@ def _execute(
         pos.quantity  = new_qty
         portfolio.cash = float(portfolio.cash) - total
 
-        db.add(Trade(
+        trade = Trade(
             portfolio_id=portfolio.id,
             ticker=decision.ticker,
             side="BUY",
@@ -132,7 +133,14 @@ def _execute(
             profit=0.0,
             actor=BOT_ACTOR,
             rationale=decision.rationale_fr,
-        ))
+        )
+        db.add(trade)
+
+        # ── Feature logging (dataset XGBoost) — capturé au moment du BUY ─────
+        if features:
+            db.flush()  # obtenir trade.id
+            db.add(TradeFeature(trade_id=trade.id, ticker=decision.ticker, **features))
+
         return True, f"BUY ${spend_usd:.0f} -> {qty:.4f} x {decision.ticker} @ ${exec_price:.2f} [{decision.confidence}]"
 
     elif decision.action == "SELL":
