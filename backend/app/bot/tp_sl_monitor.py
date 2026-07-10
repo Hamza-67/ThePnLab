@@ -83,16 +83,32 @@ def run_tp_sl_check() -> int:
     return sells
 
 
+def _run_derivatives_checks():
+    """Liquidations (tous users) + passe overnight quotidienne (00h15 Paris)."""
+    from app.database import SessionLocal
+    from app.services.liquidation import check_liquidations
+    from app.services.overnight import maybe_run_overnight
+
+    db = SessionLocal()
+    try:
+        check_liquidations(db)
+        maybe_run_overnight(db)
+    finally:
+        db.close()
+
+
 def _monitor_loop():
     logger.info("TP/SL monitor démarré — vérification toutes les 10 min (prix seulement)")
     while True:
         time.sleep(MONITOR_INTERVAL_S)
         try:
             # Ne pas se superposer à un cycle en cours — le cycle gère déjà TP/SL
-            if state.is_bot_running():
+            if not state.is_bot_running():
+                run_tp_sl_check()
+            else:
                 logger.debug("TP/SL monitor skip — cycle bot en cours")
-                continue
-            run_tp_sl_check()
+            # Dérivés : liquidations + financement/MTM (indépendant du bot)
+            _run_derivatives_checks()
         except Exception as e:
             logger.error(f"TP/SL monitor loop error: {e}", exc_info=True)
 
