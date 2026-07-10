@@ -25,6 +25,18 @@ class Position(Base):
     quantity: Mapped[float] = mapped_column(Float, default=0.0)   # ← Float (crypto fractions)
     avg_price: Mapped[float] = mapped_column(Float, default=0.0)
 
+    # ── Dérivés (v2) — les lignes existantes restent SPOT/LONG/x1 ────────────
+    instrument_type: Mapped[str] = mapped_column(String(10), default="SPOT")   # SPOT | CFD | FUTURES (OPTION réservé)
+    direction: Mapped[str] = mapped_column(String(5), default="LONG")          # LONG | SHORT
+    leverage: Mapped[float] = mapped_column(Float, default=1.0)
+    margin: Mapped[float] = mapped_column(Float, default=0.0)                  # marge initiale bloquée
+    liquidation_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    contract_size: Mapped[float] = mapped_column(Float, default=1.0)           # futures : multiplicateur
+    expiry_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # futures uniquement
+    financing_rate: Mapped[float] = mapped_column(Float, default=0.0)          # CFD : taux annuel appliqué
+    last_mark_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)    # futures : dernier settlement
+    opened_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=utcnow)
+
 
 class Trade(Base):
     __tablename__ = "trades"
@@ -38,6 +50,9 @@ class Trade(Base):
     profit: Mapped[float] = mapped_column(Float, default=0.0)
     actor: Mapped[str] = mapped_column(String(10), default="USER")
     rationale: Mapped[str] = mapped_column(Text, default="")
+    instrument_type: Mapped[str] = mapped_column(String(10), default="SPOT")
+    direction: Mapped[str] = mapped_column(String(5), default="LONG")
+    leverage: Mapped[float] = mapped_column(Float, default=1.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
