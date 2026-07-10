@@ -10,7 +10,6 @@ pandas
 requests
 pytz
 google-genai
-groq
 PyPDF2
 python-dotenv
 pydantic[email]

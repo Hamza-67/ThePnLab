@@ -20,7 +20,7 @@ ALGORITHM               = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
 GEMINI_KEY              = os.getenv("GEMINI_KEY", "")
-GROQ_KEY                = os.getenv("GROQ_KEY", "")
+MISTRAL_KEY             = os.getenv("MISTRAL_KEY", "")
 NEWSAPI_KEY             = os.getenv("NEWSAPI_KEY", "")
 
 STARTING_CASH           = float(os.getenv("STARTING_CASH", "10000"))

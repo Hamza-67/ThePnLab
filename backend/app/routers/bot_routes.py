@@ -129,7 +129,7 @@ def get_bot_status():
         "timezone":    "Europe/Paris",
         "last_cycle":  last.timestamp if last else None,
         "last_trades": last.total_trades if last else 0,
-        "model":       "gemini-2.0-flash",
+        "model":       "gemini-2.0-flash (fallback: mistral-small-latest)",
         "universe":    "Actions US high-beta + ETFs + Crypto + CAC40 (55+ actifs)",
         "trade_mode":  "Momentum concentré v5 — HIGH 15%, MEDIUM 10%, LOW 6% ($50-$3000/trade)",
         "tp_sl":       "TP automatique +15%, SL -7%, Pyramiding +10%",

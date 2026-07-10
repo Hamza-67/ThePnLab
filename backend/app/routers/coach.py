@@ -5,7 +5,7 @@ Coach IA pédagogique ultra-amélioré :
 - RAG enrichi (extraits du livre + concepts clés)
 - ML utilisateur : adapte ses conseils à l'historique réel
 - Réponses variées selon type de question (technique, psycho, stratégie)
-- Gemini → Groq fallback
+- Gemini → Mistral fallback
 - Contexte conversationnel multi-tour
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth import get_current_user
 from app.models.user import User
-from app.config import GEMINI_KEY, GROQ_KEY
+from app.config import GEMINI_KEY, MISTRAL_KEY
 
 router = APIRouter(prefix="/api/coach", tags=["coach"])
 logger = logging.getLogger(__name__)
@@ -107,21 +107,28 @@ def _call_gemini(prompt: str) -> Optional[str]:
         return None
 
 
-def _call_groq(prompt: str) -> Optional[str]:
-    if not GROQ_KEY:
+def _call_mistral(prompt: str) -> Optional[str]:
+    if not MISTRAL_KEY:
         return None
     try:
-        from groq import Groq
-        client = Groq(api_key=GROQ_KEY)
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=MAX_OUTPUT_TOKENS,
-            temperature=0.55,
+        import requests
+        resp = requests.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {MISTRAL_KEY}"},
+            json={
+                "model": "mistral-small-latest",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": MAX_OUTPUT_TOKENS,
+                "temperature": 0.55,
+            },
+            timeout=30,
         )
-        return response.choices[0].message.content.strip()
+        if resp.status_code != 200:
+            logger.warning(f"Mistral coach HTTP {resp.status_code}")
+            return None
+        return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        logger.warning(f"Groq coach error: {e}")
+        logger.warning(f"Mistral coach error: {e}")
         return None
 
 
@@ -334,8 +341,8 @@ def ask_coach(
         candidate = None
         if GEMINI_KEY:
             candidate = _call_gemini(prompt)
-        if not candidate and GROQ_KEY:
-            candidate = _call_groq(prompt)
+        if not candidate and MISTRAL_KEY:
+            candidate = _call_mistral(prompt)
 
         if not candidate:
             break
@@ -348,7 +355,7 @@ def ask_coach(
     if not rep:
         raise HTTPException(
             status_code=503,
-            detail="Coach IA indisponible — vérifie GEMINI_KEY ou GROQ_KEY dans .env"
+            detail="Coach IA indisponible — vérifie GEMINI_KEY ou MISTRAL_KEY dans .env"
         )
 
     # Enregistrer en mémoire pour éviter la répétition future

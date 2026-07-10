@@ -68,7 +68,31 @@ def _build_ml_context(db_session) -> str:
         return "Historique non disponible."
 
 
-# ── LLM call (Gemini + Groq fallback) ────────────────────────────────────────
+# ── LLM call (Gemini + Mistral fallback) ─────────────────────────────────────
+def _call_mistral(prompt: str) -> str | None:
+    """Fallback Mistral (free tier) — appel REST direct, pas de SDK à installer."""
+    from app.config import MISTRAL_KEY
+    if not MISTRAL_KEY:
+        return None
+    import requests
+    resp = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {MISTRAL_KEY}"},
+        json={
+            "model": "mistral-small-latest",
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.2,
+            "max_tokens": 1600,
+        },
+        timeout=40,
+    )
+    if resp.status_code != 200:
+        logger.error(f"Mistral HTTP {resp.status_code}: {resp.text[:300]}")
+        return None
+    return resp.json()["choices"][0]["message"]["content"].strip()
+
+
 def _safe_generate(prompt: str) -> str | None:
     if GEMINI_KEY:
         _ex_gemini = _TPE(max_workers=1)
@@ -85,41 +109,18 @@ def _safe_generate(prompt: str) -> str | None:
                 if response and response.text:
                     return response.text
             except _FuturesTimeout:
-                logger.warning("Gemini timeout (45s) — fallback Groq")
+                logger.warning("Gemini timeout (45s) — fallback Mistral")
             except Exception as e:
-                logger.warning(f"Gemini error: {e} — fallback Groq")
+                logger.warning(f"Gemini error: {e} — fallback Mistral")
         except Exception as e:
-            logger.warning(f"Gemini setup error: {e} — fallback Groq")
+            logger.warning(f"Gemini setup error: {e} — fallback Mistral")
         finally:
             _ex_gemini.shutdown(wait=False)  # ne pas bloquer si Gemini est pendu
 
     try:
-        from app.config import GROQ_KEY
-        if not GROQ_KEY:
-            return None
-        from groq import Groq
-        client = Groq(api_key=GROQ_KEY)
-        _ex_groq = _TPE(max_workers=1)
-        _fut_groq = _ex_groq.submit(
-            client.chat.completions.create,
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1600,
-            temperature=0.2,
-        )
-        try:
-            response = _fut_groq.result(timeout=40)
-            return response.choices[0].message.content.strip()
-        except _FuturesTimeout:
-            logger.error("Groq timeout (40s)")
-            return None
-        except Exception as e:
-            logger.error(f"Groq error: {e}")
-            return None
-        finally:
-            _ex_groq.shutdown(wait=False)
+        return _call_mistral(prompt)
     except Exception as e:
-        logger.error(f"Groq setup error: {e}")
+        logger.error(f"Mistral error: {e}")
         return None
 
 
@@ -433,7 +434,7 @@ def run_bot_brain(
     raw = _safe_generate(prompt)
 
     if not raw:
-        logger.error("Bot brain: LLM n'a rien retourné (Gemini + Groq tous les deux ont échoué).")
+        logger.error("Bot brain: LLM n'a rien retourné (Gemini + Mistral tous les deux ont échoué).")
         return [], "Erreur connexion IA.", "AI connection error."
 
     logger.debug(f"Bot brain raw LLM response (500c): {raw[:500]}")
