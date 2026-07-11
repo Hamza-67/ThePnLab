@@ -272,10 +272,16 @@ def generate_daily_report(cycles: list[BotCycleLog], lang: str = "fr") -> dict:
     summaries_en  = []
     total_trades  = 0
 
+    # Messages techniques — ne doivent jamais apparaître comme "lecture du marché"
+    _ERROR_MARKERS = ("Erreur connexion", "Connection error", "Cycle déjà en cours", "Cycle already running")
+
+    def _is_valid_summary(s: str) -> bool:
+        return bool(s) and not any(m in s for m in _ERROR_MARKERS)
+
     for cycle in cycles:
-        if cycle.market_summary_fr:
+        if _is_valid_summary(cycle.market_summary_fr):
             summaries_fr.append(cycle.market_summary_fr)
-        if cycle.market_summary_en:
+        if _is_valid_summary(cycle.market_summary_en):
             summaries_en.append(cycle.market_summary_en)
         total_trades += cycle.total_trades
 
@@ -306,8 +312,10 @@ def generate_daily_report(cycles: list[BotCycleLog], lang: str = "fr") -> dict:
         "total_trades": total_trades,
         "cycles_run":   len(cycles),
         "trades":       all_decisions,
-        "summary_fr":   " | ".join(summaries_fr) if summaries_fr else "Pas de résumé.",
-        "summary_en":   " | ".join(summaries_en) if summaries_en else "No summary.",
+        # Seulement la DERNIÈRE lecture du marché — concaténer tous les cycles
+        # du jour donnait un pavé illisible dans l'UI
+        "summary_fr":   summaries_fr[-1] if summaries_fr else "Pas de résumé.",
+        "summary_en":   summaries_en[-1] if summaries_en else "No summary.",
         "message_fr":   f"Le bot a effectué {total_trades} trade(s) aujourd'hui.",
         "message_en":   f"The bot executed {total_trades} trade(s) today.",
     }
