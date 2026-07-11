@@ -17,7 +17,7 @@ export default function LeaderboardTab() {
     <div>
       <div style={{ fontFamily: 'Syne', fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginBottom: 4 }}>{t('Classement','Leaderboard')}</div>
       <div style={{ color: 'var(--muted)', fontSize: '0.83rem', marginBottom: 20 }}>{t('Capital de départ identique · 10 000$','Same starting capital · $10,000')}</div>
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+      <div className="glass-panel fade-up" style={{ overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem', minWidth: 320 }}>
             <thead>

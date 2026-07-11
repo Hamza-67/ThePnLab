@@ -53,12 +53,77 @@
 }
 
 body {
-  background: var(--bg);
+  /* Fond en profondeur : halos violets/indigo très subtils sur le noir */
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(124,58,237,0.10), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 90% 110%, rgba(79,70,229,0.07), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   font-family: 'DM Sans', sans-serif;
   min-height: 100vh;
   line-height: 1.6;
   letter-spacing: 0.01em;
+}
+
+/* ── Utilitaires refonte 2026 ─────────────────────────────────────────────── */
+
+/* Panneau verre — remplaçant unifié des cartes rgba(255,255,255,0.03) */
+.glass-panel {
+  background: linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+/* Variante accent violet (hero, blocs importants) */
+.glass-panel-violet {
+  background: linear-gradient(160deg, rgba(124,58,237,0.12), rgba(79,70,229,0.04));
+  border: 1px solid rgba(124,58,237,0.22);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(124,58,237,0.10), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* Survol : légère élévation — micro-animation discrète */
+.card-hover {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(124,58,237,0.30);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35), 0 0 24px rgba(124,58,237,0.08);
+}
+
+/* Entrée en cascade des cartes */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up   { animation: fadeUp 0.4s ease both; }
+.fade-up-1 { animation: fadeUp 0.4s ease 0.05s both; }
+.fade-up-2 { animation: fadeUp 0.4s ease 0.10s both; }
+.fade-up-3 { animation: fadeUp 0.4s ease 0.15s both; }
+
+/* Texte dégradé (gros chiffres, titres hero) */
+.text-gradient {
+  background: linear-gradient(120deg, #fff 30%, #C4B5FD 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Transitions douces par défaut sur l'interactif */
+button, a, input, select {
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+              opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+::selection { background: rgba(124,58,237,0.35); color: #fff; }
+
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: none;
+  border-color: rgba(124,58,237,0.5) !important;
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.15);
 }
 
 /* Typographie — moins écrasée */

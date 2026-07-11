@@ -301,7 +301,7 @@ export default function MarketTab({ showToast }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '290px 1fr', gap: 14 }}>
         {/* Panneau gauche */}
-        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 18, padding: 16, marginBottom: isMobile ? 80 : 0 }}>
+        <div className="glass-panel fade-up" style={{ padding: 16, marginBottom: isMobile ? 80 : 0 }}>
           {/* Barre de recherche cross-secteur */}
           <div style={{ position: 'relative', marginBottom: 12 }}>
             <input
@@ -710,10 +710,7 @@ export default function MarketTab({ showToast }) {
 
         {/* Panneau droit — chart + coach */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 18,
+          <div className="glass-panel fade-up-1" style={{
             padding: 0,
             height: isMobile ? 360 : 540,
             overflow: 'hidden',
@@ -722,7 +719,7 @@ export default function MarketTab({ showToast }) {
           </div>
 
           {/* ── Coach IA panel — redesigned ── */}
-          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 18, padding: '16px 18px', marginBottom: isMobile ? 90 : 0 }}>
+          <div className="glass-panel fade-up-2" style={{ padding: '16px 18px', marginBottom: isMobile ? 90 : 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <div style={{ fontFamily: 'Syne', fontWeight: 700, color: '#fff', fontSize: '0.9rem' }}>
                 💬 {t('Coach IA','AI Coach')}

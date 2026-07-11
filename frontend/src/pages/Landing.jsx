@@ -185,8 +185,8 @@ export default function Landing() {
             maxWidth: 560, lineHeight: 1.75, marginBottom: 44,
             animation: 'fadeUp 0.7s 0.2s ease both',
           }}>
-            Données de marché réelles. Bot IA ultra-agressif. Coach personnalisé.
-            Cours niveau Master. Tout ce qu'il faut pour maîtriser les marchés financiers.
+            Données de marché réelles. Spot, CFD et Futures avec levier. Bot IA transparent.
+            Coach personnalisé. Tout ce qu'il faut pour maîtriser les marchés financiers.
           </p>
 
           {/* CTAs */}
@@ -224,10 +224,9 @@ export default function Landing() {
           </div>
 
           {/* Mock dashboard card */}
-          <div style={{
+          <div className="glass-panel" style={{
             marginTop: 64, width: '100%', maxWidth: 860,
-            background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 20, padding: '24px 28px',
+            padding: '24px 28px',
             backdropFilter: 'blur(12px)',
             boxShadow: '0 40px 120px rgba(0,0,0,0.5)',
             animation: 'fadeUp 0.8s 0.55s ease both',
@@ -339,15 +338,15 @@ export default function Landing() {
             {[
               {
                 icon: '📈', color: '#7C3AED',
-                title: 'Données de marché réelles',
-                desc: 'Prix quasi-temps réel sur actions US, CAC 40, crypto et matières premières via Yahoo Finance. Graphiques interactifs Lightweight Charts.',
-                tag: 'Live',
+                title: 'Spot, CFD & Futures',
+                desc: 'Trade au comptant ou avec levier (x2-x20) en long comme en short : marge, prix de liquidation, financement overnight — comme sur un vrai broker, sans le risque.',
+                tag: 'Nouveau',
               },
               {
                 icon: '🤖', color: '#4F46E5',
-                title: 'Bot IA ultra-agressif',
-                desc: 'Notre bot v3 utilise RSI, MACD, ADX, ATR et momentum. TP +20%, SL -7%, pyramiding à +12%. Il opère sur ETFs leveragés (TQQQ, SOXL) pour maximiser les gains.',
-                tag: 'Nouveau',
+                title: 'Bot IA transparent',
+                desc: 'Le bot analyse RSI, MACD, ADX et momentum chaque heure, avec 5 garde-fous codés (régime SPY, VIX, ML-ban). Chaque décision est expliquée en français — apprends en l\'observant.',
+                tag: 'v6',
               },
               {
                 icon: '💬', color: '#10B981',
@@ -374,9 +373,8 @@ export default function Landing() {
                 tag: 'Social',
               },
             ].map((f, i) => (
-              <div key={i} className="feat-card" style={{
-                background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: 20, padding: '28px 24px', cursor: 'default',
+              <div key={i} className="feat-card glass-panel" style={{
+                padding: '28px 24px', cursor: 'default',
               }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
                   <div style={{ width: 44, height: 44, borderRadius: 12, background: `rgba(${f.color === '#7C3AED' ? '124,58,237' : f.color === '#4F46E5' ? '79,70,229' : f.color === '#10B981' ? '16,185,129' : f.color === '#F59E0B' ? '245,158,11' : f.color === '#EF4444' ? '239,68,68' : '167,139,250'},0.15)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>
@@ -490,21 +488,22 @@ export default function Landing() {
 
         {/* ── Bot showcase ── */}
         <section style={{ padding: '40px 20px 80px', maxWidth: 900, margin: '0 auto', textAlign: 'center' }}>
-          <div style={{ display: 'inline-block', background: 'rgba(79,70,229,0.08)', border: '1px solid rgba(79,70,229,0.2)', borderRadius: 999, padding: '5px 14px', fontSize: '0.72rem', fontWeight: 600, color: '#818CF8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 20 }}>Bot IA v3</div>
+          <div style={{ display: 'inline-block', background: 'rgba(79,70,229,0.08)', border: '1px solid rgba(79,70,229,0.2)', borderRadius: 999, padding: '5px 14px', fontSize: '0.72rem', fontWeight: 600, color: '#818CF8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 20 }}>Bot IA v6</div>
           <h2 style={{ fontFamily: 'Syne', fontSize: 'clamp(1.5rem, 3vw, 2.2rem)', fontWeight: 900, color: '#fff', letterSpacing: -1, marginBottom: 12 }}>
             Un adversaire IA à battre
           </h2>
           <p style={{ color: 'rgba(255,255,255,0.4)', maxWidth: 520, margin: '0 auto 40px', lineHeight: 1.7, fontSize: '0.9rem' }}>
-            Le bot opère en mode ultra-agressif — 30% d'exposition par position, ETFs 3× leveragés, TP à +20%. Apprends en observant ses décisions.
+            Un cycle d'analyse par heure, un monitor TP/SL toutes les 10 minutes, et des garde-fous
+            codés en dur contre les marchés baissiers. Apprends en observant ses décisions expliquées.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, maxWidth: 680, margin: '0 auto' }}>
             {[
-              { label: 'Take Profit', val: '+20%', color: '#10B981' },
+              { label: 'Take Profit', val: '+15%', color: '#10B981' },
               { label: 'Stop Loss', val: '-7%', color: '#EF4444' },
-              { label: 'Pyramiding', val: '+12%', color: '#F59E0B' },
-              { label: 'Allocation max', val: '30%', color: '#A78BFA' },
+              { label: 'Pyramiding', val: '+10%', color: '#F59E0B' },
+              { label: 'Allocation max', val: '15%', color: '#A78BFA' },
             ].map((m, i) => (
-              <div key={i} style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, padding: '16px 12px' }}>
+              <div key={i} className="glass-panel card-hover" style={{ padding: '16px 12px' }}>
                 <div style={{ fontFamily: 'DM Mono', fontSize: '1.4rem', fontWeight: 700, color: m.color }}>{m.val}</div>
                 <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{m.label}</div>
               </div>

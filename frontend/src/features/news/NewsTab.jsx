@@ -32,9 +32,7 @@ export default function NewsTab() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {news.articles?.map((a, i) => (
               <a key={i} href={a.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 18px', transition: 'all 0.2s' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(124,58,237,0.35)'; e.currentTarget.style.background = 'rgba(124,58,237,0.05)' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface)' }}>
+                <div className="glass-panel card-hover" style={{ padding: '16px 18px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                     <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.9rem', lineHeight: 1.4 }}>{a.title}</div>
                     {a.trusted && <span style={{ fontSize: '0.7rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#6EE7B7', borderRadius: 6, padding: '2px 8px', whiteSpace: 'nowrap' }}>✅ Trusted</span>}

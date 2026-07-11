@@ -56,10 +56,8 @@ export default function SettingsTab({ setToken, showToast }) {
       </div>
 
       {/* Profile card */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(79,70,229,0.05))',
-        border: '1px solid rgba(124,58,237,0.15)',
-        borderRadius: 20, padding: '24px 28px', marginBottom: 14,
+      <div className="glass-panel-violet fade-up" style={{
+        padding: '24px 28px', marginBottom: 14,
         display: 'flex', alignItems: 'center', gap: 20,
       }}>
         {/* Avatar */}
@@ -86,7 +84,7 @@ export default function SettingsTab({ setToken, showToast }) {
       </div>
 
       {/* Account info */}
-      <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: '20px 24px', marginBottom: 14 }}>
+      <div className="glass-panel fade-up-1" style={{ padding: '20px 24px', marginBottom: 14 }}>
         <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 }}>
           {t('Informations du compte','Account information')}
         </div>
@@ -133,7 +131,7 @@ export default function SettingsTab({ setToken, showToast }) {
       </div>
 
       {/* Legal */}
-      <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: '20px 24px', marginBottom: 14 }}>
+      <div className="glass-panel fade-up-2" style={{ padding: '20px 24px', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
           <div>
             <div style={{ fontFamily: 'Syne', fontWeight: 700, color: '#fff', fontSize: '0.95rem', marginBottom: 4 }}>

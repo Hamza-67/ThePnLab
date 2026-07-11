@@ -161,7 +161,7 @@ export default function PortfolioTab() {
         <>
           {/* ── HERO EQUITY — Revolut style ── */}
           {data && (
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, padding: isMobile ? '24px 20px' : '32px 28px', marginBottom: 16, position: 'relative', overflow: 'hidden' }}>
+            <div className="glass-panel-violet fade-up" style={{ padding: isMobile ? '24px 20px' : '32px 28px', marginBottom: 16, position: 'relative', overflow: 'hidden' }}>
               {/* Background glow */}
               <div style={{ position: 'absolute', top: -60, right: -60, width: 200, height: 200, borderRadius: '50%', background: pnlPositive ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)', filter: 'blur(40px)', pointerEvents: 'none' }} />
 
@@ -170,7 +170,7 @@ export default function PortfolioTab() {
               </div>
 
               {/* Big equity number */}
-              <div style={{ fontFamily: 'Syne', fontSize: isMobile ? '2.4rem' : '3rem', fontWeight: 800, color: '#fff', letterSpacing: '-1.5px', lineHeight: 1, marginBottom: 10 }}>
+              <div className="text-gradient" style={{ fontFamily: 'Syne', fontSize: isMobile ? '2.4rem' : '3rem', fontWeight: 800, letterSpacing: '-1.5px', lineHeight: 1.1, marginBottom: 10 }}>
                 ${data.equity?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
 
@@ -214,7 +214,7 @@ export default function PortfolioTab() {
           <RiskMetrics pf={pf} />
 
           {sellTrades.length > 0 && (
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
+            <div className="glass-panel fade-up-1" style={{ padding: '16px 20px', marginBottom: 16 }}>
               <div style={{ fontFamily: 'Syne', fontWeight: 700, color: '#fff', marginBottom: 14, fontSize: '0.9rem' }}>
                 📊 {t('Statistiques de trading', 'Trading Statistics')}
               </div>
@@ -237,7 +237,7 @@ export default function PortfolioTab() {
           )}
 
           {/* ── Equity chart — always shown (starts at $10k even if no trades) ── */}
-          <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, padding: isMobile ? '16px 14px' : '20px 22px', marginBottom: 16 }}>
+          <div className="glass-panel fade-up-2" style={{ padding: isMobile ? '16px 14px' : '20px 22px', marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
               <div>
                 <div style={{ fontFamily: 'Syne', fontWeight: 700, color: '#fff', fontSize: '0.9rem', marginBottom: 4 }}>
@@ -271,7 +271,7 @@ export default function PortfolioTab() {
           </div>
 
           {data && allocation.length > 0 && (
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
+            <div className="glass-panel fade-up-3" style={{ padding: '16px 20px', marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <div style={{ fontFamily: 'Syne', fontWeight: 700, color: '#fff', fontSize: '0.88rem' }}>
                   {t('Allocation du capital', 'Capital allocation')}
@@ -305,7 +305,7 @@ export default function PortfolioTab() {
           )}
 
           {data?.positions?.length > 0 && (
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
+            <div className="glass-panel fade-up-3" style={{ padding: '16px 20px', marginBottom: 16 }}>
               <div style={{ fontFamily: 'Syne', fontWeight: 700, color: '#fff', marginBottom: 14, fontSize: '0.9rem' }}>
                 💼 {t('Positions ouvertes', 'Open positions')} <span style={{ color: 'rgba(255,255,255,0.35)', fontFamily: 'DM Mono', fontSize: '0.78rem' }}>({data.positions.length})</span>
               </div>
@@ -369,7 +369,7 @@ export default function PortfolioTab() {
           )}
 
           {trades.length > 0 && (
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: '16px 20px' }}>
+            <div className="glass-panel fade-up-3" style={{ padding: '16px 20px' }}>
               <div style={{ fontFamily: 'Syne', fontWeight: 700, color: '#fff', marginBottom: 14, fontSize: '0.9rem' }}>
                 🔄 {t('Historique des trades', 'Trade History')} <span style={{ color: 'rgba(255,255,255,0.35)', fontFamily: 'DM Mono', fontSize: '0.78rem' }}>({trades.length})</span>
               </div>

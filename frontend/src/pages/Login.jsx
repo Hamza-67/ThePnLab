@@ -84,16 +84,15 @@ export default function Login({ setToken }) {
         pointerEvents: 'none',
       }} />
 
-      <div className="login-card" style={{
+      <div className="login-card glass-panel" style={{
         opacity: 0, position: 'relative', zIndex: 1,
-        background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
-        borderRadius: 20, padding: '40px 36px', width: '100%', maxWidth: 420,
+        padding: '40px 36px', width: '100%', maxWidth: 420,
         backdropFilter: 'blur(20px)', margin: '20px',
       }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <img src="/logo.png" alt="ThePnLab" style={{ height: 52, objectFit: 'contain', margin: '0 auto 14px', display: 'block' }} />
-          <h2 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: '1.5rem', color: '#fff' }}>
+          <h2 className="text-gradient" style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: '1.5rem' }}>
             {isSignup ? 'Créer un compte' : 'Connexion'}
           </h2>
           <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginTop: 4 }}>
