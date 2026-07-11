@@ -15,9 +15,10 @@ export default function CycleCard({ trade }) {
   const action = trade.action || trade.side || 'HOLD'
   const rationale = lang === 'fr' ? trade.rationale_fr : trade.rationale_en
   const price = typeof trade.price === 'number' ? trade.price.toFixed(2) : trade.price
+  const edge = action === 'BUY' ? 'border-l-green' : action === 'SELL' ? 'border-l-red' : 'border-l-white/20'
 
   return (
-    <div className="bg-white/[0.03] border border-border-soft rounded-xl px-4 py-3">
+    <div className={`glass-panel card-hover border-l-4 ${edge} px-4 py-3.5`}>
       <div className="flex items-center gap-2 flex-wrap">
         <Badge tone={ACTION_TONE[action] || 'neutral'}>
           {action === 'BUY' ? t('ACHAT', 'BUY') : action === 'SELL' ? t('VENTE', 'SELL') : t('ATTENTE', 'HOLD')}

@@ -8,7 +8,7 @@ import PerformancePanel from './PerformancePanel'
 import HistoryList from './HistoryList'
 import HowItWorks from './HowItWorks'
 
-/** Onglet Trade AI — shell : hero + tabs (aujourd'hui / perf / historique / infos). */
+/** Onglet Trade AI — hero pleine largeur + tabs segmentés + layout 2 colonnes. */
 export default function BotTab() {
   const t = useT()
   const lang = useLang()
@@ -16,61 +16,66 @@ export default function BotTab() {
   const { data: report } = useBotReport(lang)
 
   return (
-    <div className="max-w-3xl">
-      <div className="font-title text-xl font-extrabold text-white mb-1">Trade AI</div>
-      <div className="text-white/35 text-sm mb-5">
-        {t('Le bot analyse le marché chaque heure et trade en autonomie — chaque décision est expliquée.',
-           'The bot analyzes the market every hour and trades autonomously — every decision is explained.')}
-      </div>
-
+    <div className="max-w-5xl mx-auto">
       <BotHero />
 
       <Tabs
-        className="mb-4 flex-wrap"
+        className="mb-5"
         active={tab}
         onChange={setTab}
         tabs={[
           { value: 'today',   label: t("Aujourd'hui", 'Today') },
-          { value: 'perf',    label: t('Performance 30j', '30d Performance') },
+          { value: 'perf',    label: t('Performance', 'Performance') },
           { value: 'history', label: t('Historique', 'History') },
           { value: 'info',    label: t('Comment ça marche ?', 'How it works?') },
         ]}
       />
 
       {tab === 'today' && (
-        <div className="flex flex-col gap-4">
-          {(report?.summary_fr || report?.summary_en) && (
-            <Card>
-              <div className="text-[0.68rem] text-violet-pale uppercase tracking-wider mb-2">
-                🌐 {t('Lecture du marché', 'Market read')}
+        <div className="flex flex-col gap-5">
+          {/* Ligne du haut : lecture du marché (2/3) + stats du jour (1/3) */}
+          <div className="grid md:grid-cols-3 gap-5">
+            <Card className="md:col-span-2 fade-up">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="size-8 rounded-lg bg-violet/15 border border-violet/25 flex items-center justify-center text-sm">🌐</span>
+                <span className="text-xs text-violet-pale uppercase tracking-widest font-semibold">
+                  {t('Lecture du marché', 'Market read')}
+                </span>
               </div>
-              <p className="text-white/55 text-sm leading-relaxed m-0">
-                {lang === 'fr' ? report.summary_fr : report.summary_en}
+              <p className="text-white/60 text-[0.925rem] leading-relaxed m-0">
+                {(lang === 'fr' ? report?.summary_fr : report?.summary_en) ||
+                  t('En attente du prochain cycle d\'analyse…', 'Waiting for the next analysis cycle…')}
               </p>
             </Card>
-          )}
 
-          <Card>
-            <div className="grid grid-cols-3 gap-3">
-              <StatBox label={t('Trades exécutés', 'Trades executed')} value={report?.total_trades ?? 0} />
+            <Card className="fade-up-1 flex flex-col justify-center gap-5">
+              <StatBox label={t('Trades exécutés', 'Trades executed')} value={report?.total_trades ?? 0}
+                       tone={report?.total_trades > 0 ? 'green' : undefined} />
+              <div className="h-px bg-white/5" />
               <StatBox label={t("Cycles aujourd'hui", 'Cycles today')} value={report?.cycles_run ?? 0} />
+              <div className="h-px bg-white/5" />
               <StatBox label={t('Actifs analysés', 'Assets screened')} value="50+" />
-            </div>
-          </Card>
+            </Card>
+          </div>
 
+          {/* Décisions du jour */}
           {report?.trades?.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              <div className="text-xs text-white/35 uppercase tracking-wider">
-                {t('Décisions du jour', "Today's decisions")}
+            <div className="fade-up-2">
+              <div className="text-xs text-white/35 uppercase tracking-widest font-semibold mb-3">
+                {t('Décisions du jour', "Today's decisions")} · {report.trades.length}
               </div>
-              {[...report.trades].reverse().map((trade, i) => <CycleCard key={i} trade={trade} />)}
+              <div className="flex flex-col gap-2.5">
+                {[...report.trades].reverse().map((trade, i) => <CycleCard key={i} trade={trade} />)}
+              </div>
             </div>
           ) : (
-            <EmptyState
-              icon="😴"
-              title={t("Pas de trade aujourd'hui", 'No trades today')}
-              subtitle={lang === 'fr' ? report?.message_fr : report?.message_en}
-            />
+            <Card className="fade-up-2">
+              <EmptyState
+                icon="😴"
+                title={t("Pas de trade aujourd'hui", 'No trades today')}
+                subtitle={lang === 'fr' ? report?.message_fr : report?.message_en}
+              />
+            </Card>
           )}
         </div>
       )}

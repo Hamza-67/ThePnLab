@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import API from '../../api/client'
-import { Card, Badge, Button } from '../../components/ui'
+import { Badge } from '../../components/ui'
 import { useT } from '../../context/LangContext'
 import { useBotStatus, useSystemStatus } from './useBotData'
 
-/** Hero du bot : pill de statut (actif / cycle en cours / pause nocturne),
- *  planning v6, countdown vers le prochain cycle horaire, bouton trigger. */
+/** Hero du bot — bannière pleine largeur : avatar lumineux, titre dégradé,
+ *  statut (actif / cycle en cours / pause nocturne), countdown, bouton trigger. */
 export default function BotHero() {
   const t = useT()
   const qc = useQueryClient()
@@ -25,7 +25,7 @@ export default function BotHero() {
     ? { tone: 'violet', label: `⏳ ${t('Cycle en cours…', 'Cycle running…')}` }
     : quiet
     ? { tone: 'gold', label: `🌙 ${t(`En pause (${system?.quiet_hours}h Paris)`, `Paused (${system?.quiet_hours}h Paris)`)}` }
-    : { tone: 'green', label: `🟢 ${t('Actif', 'Active')}` }
+    : { tone: 'green', label: `● ${t('Actif', 'Active')}` }
 
   const trigger = async () => {
     setTriggering(true)
@@ -46,38 +46,66 @@ export default function BotHero() {
   }
 
   return (
-    <Card className="mb-4">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="text-3xl">🤖</div>
+    <div className="glass-panel-violet fade-up relative overflow-hidden p-6 md:p-8 mb-6">
+      {/* Halo décoratif */}
+      <div className="absolute -top-24 -right-16 size-72 rounded-full bg-violet/20 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-32 -left-16 size-64 rounded-full bg-indigo/15 blur-3xl pointer-events-none" />
+
+      <div className="relative flex items-center justify-between gap-6 flex-wrap">
+        {/* Avatar + titre */}
+        <div className="flex items-center gap-5">
+          <div className="relative shrink-0">
+            <div className="size-16 md:size-20 rounded-2xl bg-gradient-to-br from-violet to-indigo flex items-center justify-center text-3xl md:text-4xl shadow-lg shadow-violet/50">
+              🤖
+            </div>
+            <span className={`absolute -bottom-1 -right-1 size-4 rounded-full border-2 border-bg ${running ? 'bg-violet-light animate-pulse' : quiet ? 'bg-gold' : 'bg-green'}`} />
+          </div>
           <div>
-            <div className="font-title font-extrabold text-white text-lg">Trade AI</div>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <div className="text-gradient font-title font-extrabold text-3xl md:text-4xl tracking-tight leading-none">
+              Trade AI
+            </div>
+            <div className="flex items-center gap-2.5 mt-2.5 flex-wrap">
               <Badge tone={pill.tone}>{pill.label}</Badge>
               {!running && !quiet && (
-                <span className="text-white/30 text-xs font-mono">
-                  {t(`prochain cycle ~${minsToNext}min`, `next cycle ~${minsToNext}min`)}
+                <span className="text-white/40 text-xs font-mono">
+                  {t(`prochain cycle dans ~${minsToNext} min`, `next cycle in ~${minsToNext} min`)}
                 </span>
               )}
             </div>
           </div>
         </div>
+
+        {/* Bouton trigger */}
         <div className="flex flex-col items-end gap-2">
-          <Button variant="ghost" onClick={trigger} disabled={triggering || running} className="whitespace-nowrap">
+          <button
+            onClick={trigger}
+            disabled={triggering || running}
+            className={`px-6 py-3 rounded-xl border-none font-semibold text-sm cursor-pointer text-white
+              bg-gradient-to-br from-violet to-indigo shadow-lg shadow-violet/40
+              hover:shadow-violet/60 hover:-translate-y-0.5 transition-all
+              ${(triggering || running) ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
             {running ? `⏳ ${t('Analyse en cours…', 'Running…')}` : `▶ ${t('Déclencher un cycle', 'Trigger cycle')}`}
-          </Button>
+          </button>
           {triggerMsg && (
             <span className={`text-xs ${triggerMsg.ok ? 'text-green' : 'text-red'}`}>{triggerMsg.text}</span>
           )}
         </div>
       </div>
 
-      {/* Ligne infos v6 */}
-      <div className="flex gap-4 mt-4 pt-3 border-t border-white/5 text-xs text-white/35 flex-wrap">
-        <span>🧠 {status?.model || 'gemini-2.0-flash'}</span>
-        <span>🕐 {status?.schedule || t('Cycles horaires 9h-22h Paris + monitor TP/SL 10min', 'Hourly cycles 9am-10pm Paris + 10min TP/SL monitor')}</span>
-        <span>🎯 {status?.tp_sl || 'TP +15% · SL -7%'}</span>
+      {/* Chips infos v6 */}
+      <div className="relative flex gap-2.5 mt-6 flex-wrap">
+        {[
+          { icon: '🧠', text: status?.model || 'gemini-2.0-flash' },
+          { icon: '🕐', text: t('1 cycle / heure · 9h-22h Paris · pause 0h-7h', '1 cycle / hour · 9am-10pm Paris · sleeps 0-7am') },
+          { icon: '⏱️', text: t('Monitor TP/SL toutes les 10 min', 'TP/SL monitor every 10 min') },
+          { icon: '🎯', text: 'TP +15% · SL −7%' },
+        ].map((chip, i) => (
+          <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-white/55 font-mono">
+            <span>{chip.icon}</span> {chip.text}
+          </span>
+        ))}
       </div>
-    </Card>
+    </div>
   )
 }

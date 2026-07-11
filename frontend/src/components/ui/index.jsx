@@ -38,11 +38,11 @@ export function StatBox({ label, value, sub, tone, className = '' }) {
     tone === 'green' ? 'text-green' : tone === 'red' ? 'text-red' : 'text-white'
   return (
     <div className={`text-center ${className}`}>
-      <div className="text-[0.66rem] text-white/30 uppercase tracking-wider mb-1">{label}</div>
-      <div className={`font-title font-bold text-base ${valueColor}`}>
+      <div className="text-[0.66rem] text-white/30 uppercase tracking-wider mb-1.5">{label}</div>
+      <div className={`font-title font-extrabold text-2xl leading-none ${valueColor}`}>
         {value}
-        {sub && <span className="text-xs text-white/30 font-body ml-1">{sub}</span>}
       </div>
+      {sub && <div className="text-xs text-white/30 font-body mt-1.5">{sub}</div>}
     </div>
   )
 }
@@ -69,15 +69,15 @@ export function Button({ children, variant = 'primary', className = '', disabled
 
 export function Tabs({ tabs, active, onChange, className = '' }) {
   return (
-    <div className={`flex gap-1.5 ${className}`}>
+    <div className={`inline-flex flex-wrap bg-white/[0.04] border border-white/10 rounded-2xl p-1.5 gap-1 ${className}`}>
       {tabs.map(tab => (
         <button
           key={tab.value}
           onClick={() => onChange(tab.value)}
-          className={`px-4 py-1.5 rounded-field border text-sm font-semibold cursor-pointer transition-colors ${
+          className={`px-5 py-2 rounded-xl text-sm font-semibold cursor-pointer border-none transition-all ${
             active === tab.value
-              ? 'bg-violet/20 border-violet/40 text-violet-pale'
-              : 'bg-white/5 border-white/10 text-white/40 hover:text-white/70'
+              ? 'bg-gradient-to-br from-violet to-indigo text-white shadow-lg shadow-violet/40'
+              : 'bg-transparent text-white/40 hover:text-white/75'
           }`}
         >
           {tab.label}
